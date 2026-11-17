@@ -26,13 +26,13 @@ export const HeroSection: React.FC = () => {
       headline: (
         <>
           YOUR{' '}
-          <span className="font-serif italic font-normal text-[#E11D48]">
+          <span className="font-['Cormorant_Garamond',Georgia,serif] italic text-[#E11D48]">
             newest
           </span>
           <br />
           OBSESSION
           <br />
-          <span className="font-serif italic font-normal text-[#121110]">
+          <span className="font-['Cormorant_Garamond',Georgia,serif] not-italic font-medium text-[#121110]">
             for hair
           </span>
         </>
@@ -65,13 +65,13 @@ export const HeroSection: React.FC = () => {
       headline: (
         <>
           INDIA'S{' '}
-          <span className="font-serif italic font-normal text-[#9E3C1B]">
+          <span className="font-['Cormorant_Garamond',Georgia,serif] italic text-[#9E3C1B]">
             first ever
           </span>
           <br />
           HOT WATER
           <br />
-          <span className="font-serif italic font-normal text-[#121110]">
+          <span className="font-['Cormorant_Garamond',Georgia,serif] not-italic font-medium text-[#121110]">
             shampoo
           </span>
         </>
@@ -172,15 +172,15 @@ export const HeroSection: React.FC = () => {
             {/* Left Column: Editorial Typography */}
             <div className="lg:col-span-7 text-left space-y-6 sm:space-y-8">
               
-              {/* Top Kicker matching Screenshot 2026-11-10 161906.png */}
+              {/* Top Kicker */}
               <div className="inline-block">
                 <div className="text-xs sm:text-sm font-semibold tracking-[0.28em] text-[#71717A] uppercase bg-white/80 backdrop-blur-sm px-3.5 py-1.5 rounded-full border border-[#E8DFD1]/80 shadow-2xs">
                   {currentSlide.kicker}
                 </div>
               </div>
 
-              {/* Main Headline with exact same serif + italic font styling */}
-              <h1 className="font-serif text-5xl sm:text-6xl lg:text-7xl xl:text-8xl font-bold text-[#121110] leading-[0.98] tracking-tight">
+              {/* Main Headline */}
+              <h1 className="font-['Cormorant_Garamond',Georgia,serif] text-[2.75rem] sm:text-[3.5rem] lg:text-[4.25rem] xl:text-[5.25rem] font-semibold text-[#121110] leading-[0.98] tracking-[-0.02em]">
                 {currentSlide.headline}
               </h1>
 
