@@ -7,12 +7,23 @@ import {
   isAuthorizedFirebaseAdmin,
   signInFounderWithGoogle,
   signOutFounderGoogle,
+  fetchAllOrdersAdminOnce,
   subscribeToAllOrdersAdmin,
   verifyOrderPaidInFirestore,
   markOrderFailedInFirestore,
   updateOrderDeliveryStatusInFirestore,
   clearAllOrdersInFirestore
 } from '../firebase';
+
+async function safeParseJson(res: Response): Promise<Record<string, unknown> | null> {
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) return null;
+  try {
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 interface FounderAuthHeaders {
   email: string;
@@ -496,26 +507,44 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchFounderOrders = useCallback(async (email: string, code: string): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const res = await fetch('/api/orders', {
-        headers: {
-          'x-founder-email': email,
-          'x-founder-code': code,
-        },
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { ok: false, error: data.error || 'Failed to fetch live orders.' };
+      let cloudList = firestoreOrders;
+      if (isFirebaseCloudConnected) {
+        try {
+          cloudList = await fetchAllOrdersAdminOnce();
+          setFirestoreOrders(cloudList);
+          setOrders(prev => mergeOrderLists(cloudList, prev));
+        } catch (err) {
+          console.warn('Firestore fetch notice:', err);
+        }
       }
-      if (Array.isArray(data.orders)) {
-        setOrders(prev => mergeOrderLists(firestoreOrders, mergeOrderLists(data.orders, prev)));
-        setServerAnalytics(data.analytics || null);
+
+      try {
+        const res = await fetch('/api/orders', {
+          headers: {
+            'x-founder-email': email,
+            'x-founder-code': code,
+          },
+        });
+        const data = await safeParseJson(res);
+        if (data !== null) {
+          if (!res.ok) {
+            return { ok: false, error: typeof data.error === 'string' ? data.error : 'Failed to fetch live orders.' };
+          }
+          if (Array.isArray(data.orders)) {
+            setOrders(prev => mergeOrderLists(cloudList, mergeOrderLists(data.orders as Order[], prev)));
+            setServerAnalytics((data.analytics as OrderAnalytics) || null);
+          }
+        }
+      } catch {
+        // Static Vercel hosting: no Express /api server running, Firestore/local state used
       }
+
       return { ok: true };
     } catch (err) {
       console.error('Fetch founder orders error:', err);
-      return { ok: false, error: 'Network error loading founder orders.' };
+      return { ok: false, error: 'Unable to refresh founder orders.' };
     }
-  }, [firestoreOrders]);
+  }, [firestoreOrders, isFirebaseCloudConnected]);
 
   const updateOrderStatus = useCallback(
     async (
@@ -523,6 +552,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: Order['orderStatus'],
       founderAuth?: FounderAuthHeaders
     ): Promise<{ ok: boolean; error?: string }> => {
+      const targetOrder = combinedOrders.find(o => o.id === orderId);
+      if (
+        targetOrder &&
+        (status === 'DISPATCHED' || status === 'OUT_FOR_DELIVERY' || status === 'DELIVERED') &&
+        targetOrder.paymentStatus !== 'PAID'
+      ) {
+        return {
+          ok: false,
+          error: 'Safety block: Cannot mark an unpaid order as Dispatched/Delivered until UPI payment is verified as PAID.',
+        };
+      }
+
       let firestoreUpdated = false;
       if (isFirebaseCloudConnected) {
         try {
@@ -546,23 +587,23 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             },
             body: JSON.stringify({ orderStatus: status }),
           });
-          const data = await res.json();
-          if (!res.ok) {
-            if (firestoreUpdated && res.status === 404) {
-              setOrders(prev => prev.map(ord => (ord.id === orderId ? { ...ord, orderStatus: status } : ord)));
-              return { ok: true };
+          const data = await safeParseJson(res);
+          if (data !== null) {
+            if (!res.ok) {
+              if (firestoreUpdated && res.status === 404) {
+                setOrders(prev => prev.map(ord => (ord.id === orderId ? { ...ord, orderStatus: status } : ord)));
+                return { ok: true };
+              }
+              return { ok: false, error: typeof data.error === 'string' ? data.error : 'Could not update delivery status.' };
             }
-            return { ok: false, error: data.error || 'Could not update delivery status.' };
+            if (Array.isArray(data.orders)) {
+              setOrders(prev => mergeOrderLists(firestoreOrders, mergeOrderLists(data.orders as Order[], prev)));
+              setServerAnalytics((data.analytics as OrderAnalytics) || null);
+            }
+            return { ok: true };
           }
-          if (Array.isArray(data.orders)) {
-            setOrders(prev => mergeOrderLists(firestoreOrders, mergeOrderLists(data.orders, prev)));
-            setServerAnalytics(data.analytics || null);
-          }
-          return { ok: true };
         } catch (err) {
           console.error('Update order status error:', err);
-          if (firestoreUpdated) return { ok: true };
-          return { ok: false, error: 'Network error updating delivery status.' };
         }
       }
 
@@ -570,7 +611,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setOrders(prev => prev.map(ord => (ord.id === orderId ? { ...ord, orderStatus: status } : ord)));
       return { ok: true };
     },
-    [isFirebaseCloudConnected, firestoreOrders]
+    [isFirebaseCloudConnected, firestoreOrders, combinedOrders]
   );
 
   const founderVerifyUpiPayment = useCallback(
@@ -594,6 +635,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      let serverHandled = false;
       try {
         const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/verify-upi`, {
           method: 'POST',
@@ -604,50 +646,56 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           body: JSON.stringify({ utrRef: effectiveRef }),
         });
-        const data = await res.json();
-        if (!res.ok) {
-          if (firestoreUpdated && res.status === 404) {
-            setOrders(prev =>
-              prev.map(ord =>
-                ord.id === orderId
-                  ? {
-                      ...ord,
-                      paymentStatus: 'PAID',
-                      orderStatus: 'CONFIRMED',
-                      gatewayTransactionId: effectiveRef,
-                      paymentVerifiedAt: verifiedAtIso,
-                      paymentFailureReason: undefined,
-                    }
-                  : ord
-              )
-            );
+        const data = await safeParseJson(res);
+        if (data !== null) {
+          serverHandled = true;
+          if (!res.ok) {
+            if (!firestoreUpdated) {
+              return { ok: false, message: typeof data.error === 'string' ? data.error : 'Could not verify UPI reference.' };
+            }
+          } else {
+            if (Array.isArray(data.orders)) {
+              setOrders(prev => mergeOrderLists(firestoreOrders, mergeOrderLists(data.orders as Order[], prev)));
+              setServerAnalytics((data.analytics as OrderAnalytics) || null);
+            }
+            const confirmedOrder = data.order as Order | undefined;
+            const confirmedRef = confirmedOrder?.gatewayTransactionId || effectiveRef;
             return {
               ok: true,
-              message: `Order #${orderId} confirmed PAID in Firebase (Ref: ${effectiveRef})! Customer checkout & Thank You message unlocked.`,
+              message: `Order #${orderId} confirmed PAID (Ref: ${confirmedRef})! Customer checkout & Thank You message unlocked.`,
             };
           }
-          return { ok: false, message: data.error || 'Could not verify UPI reference.' };
         }
-        if (Array.isArray(data.orders)) {
-          setOrders(prev => mergeOrderLists(firestoreOrders, mergeOrderLists(data.orders, prev)));
-          setServerAnalytics(data.analytics || null);
-        }
-        const confirmedOrder = data.order as Order | undefined;
-        const confirmedRef = confirmedOrder?.gatewayTransactionId || effectiveRef;
+      } catch (err) {
+        console.warn('Server UPI verify notice (falling back to Cloud/Local):', err);
+      }
+
+      if (!serverHandled || firestoreUpdated) {
+        setServerAnalytics(null);
+        setOrders(prev =>
+          prev.map(ord =>
+            ord.id === orderId
+              ? {
+                  ...ord,
+                  paymentStatus: 'PAID',
+                  orderStatus:
+                    ord.orderStatus === 'PENDING_CONFIRMATION' || ord.orderStatus === 'PAYMENT_FAILED'
+                      ? 'CONFIRMED'
+                      : ord.orderStatus,
+                  gatewayTransactionId: effectiveRef,
+                  paymentVerifiedAt: verifiedAtIso,
+                  paymentFailureReason: undefined,
+                }
+              : ord
+          )
+        );
         return {
           ok: true,
-          message: `Order #${orderId} confirmed PAID (Ref: ${confirmedRef})! Customer checkout & Thank You message unlocked.`,
+          message: `Order #${orderId} confirmed PAID (Ref: ${effectiveRef})! Customer checkout & Thank You message unlocked.`,
         };
-      } catch (err) {
-        console.error('Founder verify UPI payment error:', err);
-        if (firestoreUpdated) {
-          return {
-            ok: true,
-            message: `Order #${orderId} confirmed PAID in Firebase (Ref: ${effectiveRef})! Customer checkout & Thank You message unlocked.`,
-          };
-        }
-        return { ok: false, message: 'Network error verifying UPI transaction reference.' };
       }
+
+      return { ok: false, message: 'Could not verify UPI transaction reference.' };
     },
     [isFirebaseCloudConnected, firestoreOrders]
   );
@@ -670,6 +718,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      let serverHandled = false;
       try {
         const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/mark-failed`, {
           method: 'POST',
@@ -680,35 +729,41 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           body: JSON.stringify({ reason }),
         });
-        const data = await res.json();
-        if (!res.ok) {
-          if (firestoreUpdated && res.status === 404) {
-            setOrders(prev =>
-              prev.map(ord =>
-                ord.id === orderId
-                  ? { ...ord, paymentStatus: 'FAILED', orderStatus: 'PAYMENT_FAILED', paymentFailureReason: reason }
-                  : ord
-              )
-            );
-            return { ok: true, message: `Order #${orderId} marked as PAYMENT FAILED.` };
+        const data = await safeParseJson(res);
+        if (data !== null) {
+          serverHandled = true;
+          if (!res.ok) {
+            if (!firestoreUpdated) {
+              return { ok: false, message: typeof data.error === 'string' ? data.error : 'Could not mark order as failed.' };
+            }
+          } else {
+            if (Array.isArray(data.orders)) {
+              setOrders(prev => mergeOrderLists(firestoreOrders, mergeOrderLists(data.orders as Order[], prev)));
+              setServerAnalytics((data.analytics as OrderAnalytics) || null);
+            }
+            return {
+              ok: true,
+              message: `Order #${orderId} marked as PAYMENT FAILED.`,
+            };
           }
-          return { ok: false, message: data.error || 'Could not mark order as failed.' };
         }
-        if (Array.isArray(data.orders)) {
-          setOrders(prev => mergeOrderLists(firestoreOrders, mergeOrderLists(data.orders, prev)));
-          setServerAnalytics(data.analytics || null);
-        }
-        return {
-          ok: true,
-          message: `Order #${orderId} marked as PAYMENT FAILED.`,
-        };
       } catch (err) {
-        console.error('Founder mark failed error:', err);
-        if (firestoreUpdated) {
-          return { ok: true, message: `Order #${orderId} marked as PAYMENT FAILED.` };
-        }
-        return { ok: false, message: 'Network error updating payment status.' };
+        console.warn('Server mark-failed notice (falling back to Cloud/Local):', err);
       }
+
+      if (!serverHandled || firestoreUpdated) {
+        setServerAnalytics(null);
+        setOrders(prev =>
+          prev.map(ord =>
+            ord.id === orderId
+              ? { ...ord, paymentStatus: 'FAILED', orderStatus: 'PAYMENT_FAILED', paymentFailureReason: reason }
+              : ord
+          )
+        );
+        return { ok: true, message: `Order #${orderId} marked as PAYMENT FAILED.` };
+      }
+
+      return { ok: false, message: 'Could not update payment status.' };
     },
     [isFirebaseCloudConnected, firestoreOrders]
   );
@@ -719,16 +774,20 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (isFirebaseCloudConnected) {
           await clearAllOrdersInFirestore();
         }
-        const res = await fetch('/api/orders/reset', {
-          method: 'POST',
-          headers: {
-            'x-founder-email': founderAuth.email,
-            'x-founder-code': founderAuth.code,
-          },
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          return { ok: false, message: data.error || 'Could not reset server orders.' };
+        try {
+          const res = await fetch('/api/orders/reset', {
+            method: 'POST',
+            headers: {
+              'x-founder-email': founderAuth.email,
+              'x-founder-code': founderAuth.code,
+            },
+          });
+          const data = await safeParseJson(res);
+          if (data !== null && !res.ok) {
+            return { ok: false, message: typeof data.error === 'string' ? data.error : 'Could not reset server orders.' };
+          }
+        } catch {
+          // Static Vercel hosting: no Express /api server running
         }
         try {
           localStorage.removeItem('hairology_orders_v1');

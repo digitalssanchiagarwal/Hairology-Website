@@ -39,6 +39,7 @@ export const FastCheckoutModal: React.FC = () => {
     items,
     subtotal,
     shippingFee,
+    orders,
     upsertOrder
   } = useCart();
 
@@ -80,10 +81,22 @@ export const FastCheckoutModal: React.FC = () => {
     }
   }, [grandTotal, upiDeepLink]);
 
-  // Listen to Firebase Firestore public status in real time AND poll server every 2s.
+  // Listen to Firebase Firestore public status in real time, local context updates, AND poll server when available.
   // Thank You confirmation ONLY unlocks once paymentStatus === 'PAID'.
   useEffect(() => {
     if (!isCheckoutOpen || checkoutStep !== 2 || !pendingOrder?.id || completedOrder) return;
+
+    const matchInContext = orders.find(o => o.id === pendingOrder.id);
+    if (matchInContext?.paymentStatus === 'PAID') {
+      setCompletedOrder(matchInContext);
+      setPendingOrder(null);
+      return;
+    }
+    if (matchInContext?.paymentStatus === 'FAILED') {
+      setPaymentError(
+        matchInContext.paymentFailureReason || 'Payment was not received or was declined. Please retry UPI payment.'
+      );
+    }
 
     const unsubFirestore = subscribeToPublicOrderStatus(pendingOrder.id, statusSnap => {
       if (statusSnap.paymentStatus === 'PAID') {
@@ -109,6 +122,8 @@ export const FastCheckoutModal: React.FC = () => {
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/orders/${encodeURIComponent(pendingOrder.id)}/status`);
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok || !contentType.includes('application/json')) return;
         const data = await res.json();
         if (data?.paid && data?.order) {
           upsertOrder(data.order);
@@ -120,7 +135,7 @@ export const FastCheckoutModal: React.FC = () => {
           );
         }
       } catch {
-        // ignore transient network poll error
+        // ignore static/Vercel or transient network poll error
       }
     }, 2000);
 
@@ -128,7 +143,7 @@ export const FastCheckoutModal: React.FC = () => {
       unsubFirestore();
       clearInterval(interval);
     };
-  }, [isCheckoutOpen, checkoutStep, pendingOrder, completedOrder, upsertOrder]);
+  }, [isCheckoutOpen, checkoutStep, pendingOrder, completedOrder, orders, upsertOrder]);
 
   const handlePincodeChange = (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 6);
@@ -177,13 +192,13 @@ export const FastCheckoutModal: React.FC = () => {
       return;
     }
 
-    if (!cleanCity) {
-      setAddressError('Please enter your city.');
+    if (!cleanCity || cleanCity.length < 2) {
+      setAddressError('Please enter your city (at least 2 characters).');
       return;
     }
 
-    if (!cleanState) {
-      setAddressError('Please enter your state.');
+    if (!cleanState || cleanState.length < 2) {
+      setAddressError('Please enter your state (at least 2 characters).');
       return;
     }
 
@@ -195,46 +210,84 @@ export const FastCheckoutModal: React.FC = () => {
     setIsCreatingOrder(true);
     const cleanCustomerDigits = getCustomerPhoneDigits(phone);
     const customerFormattedPhone = `+91 ${cleanCustomerDigits}`;
+    const addressPayload = {
+      recipientName: cleanName,
+      phoneNumber: customerFormattedPhone,
+      streetAddress: cleanAddress,
+      city: cleanCity,
+      state: cleanState,
+      pincode: cleanPincode
+    };
+
+    const buildClientFallbackOrder = (): Order => ({
+      id: `HR-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      createdAt: new Date().toISOString(),
+      customerPhone: customerFormattedPhone,
+      deliveryAddress: addressPayload,
+      items: [...items],
+      subtotal,
+      discount: 0,
+      shipping: shippingFee,
+      codFee: 0,
+      total: grandTotal,
+      paymentMethod: 'UPI_QR',
+      paymentStatus: 'PENDING',
+      orderStatus: 'PENDING_CONFIRMATION',
+      payerUpi: USER_UPI_ID,
+      trackingNumber: `DELHIVERY-AWB-${Math.floor(100000000 + Math.random() * 900000000)}`,
+    });
 
     try {
-      const res = await fetch('/api/orders/upi-create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deliveryAddress: {
-            recipientName: cleanName,
-            phoneNumber: customerFormattedPhone,
-            streetAddress: cleanAddress,
-            city: cleanCity,
-            state: cleanState,
-            pincode: cleanPincode
-          },
-          items,
-          subtotal,
-          discount: 0,
-          shipping: shippingFee,
-          total: grandTotal
-        })
-      });
+      let createdOrder: Order | null = null;
+      let serverExplicitError: string | null = null;
 
-      const data = await res.json();
-      if (!res.ok || !data?.order) {
-        setAddressError(data?.error || 'Could not initialize UPI payment session. Please retry.');
+      try {
+        const res = await fetch('/api/orders/upi-create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deliveryAddress: addressPayload,
+            items,
+            subtotal,
+            discount: 0,
+            shipping: shippingFee,
+            total: grandTotal
+          })
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (res.ok && data?.order) {
+            createdOrder = data.order as Order;
+          } else if (res.status >= 400 && res.status < 500 && res.status !== 404 && data?.error) {
+            serverExplicitError = data.error;
+          }
+        }
+      } catch {
+        // Static Vercel / serverless fallback below
+      }
+
+      if (serverExplicitError) {
+        setAddressError(serverExplicitError);
         setIsCreatingOrder(false);
         return;
       }
 
+      if (!createdOrder) {
+        createdOrder = buildClientFallbackOrder();
+      }
+
       try {
-        await persistPendingOrderToFirestore(data.order);
+        await persistPendingOrderToFirestore(createdOrder);
       } catch (firestoreErr) {
         console.warn('Firestore order backup notice:', firestoreErr);
       }
 
-      upsertOrder(data.order);
-      setPendingOrder(data.order);
+      upsertOrder(createdOrder);
+      setPendingOrder(createdOrder);
       setCheckoutStep(2);
     } catch {
-      setAddressError('Network error preparing your UPI checkout. Please try again.');
+      setAddressError('Could not open UPI payment scanner. Please try again.');
     } finally {
       setIsCreatingOrder(false);
     }

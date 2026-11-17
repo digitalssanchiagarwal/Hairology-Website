@@ -33,8 +33,30 @@ import { ADMIN_PHONE, USER_UPI_ID } from '../data/products';
 import { Order } from '../types';
 
 const AUTHORIZED_FOUNDER_EMAIL = 'guddan1102@gmail.com';
+const DEFAULT_STATIC_FOUNDER_CODE = '4448989';
+const FOUNDER_CODE_STORAGE_KEY = 'hairology_founder_access_code_v1';
 const AUTH_SESSION_KEY = 'hairology_admin_auth_v2';
 const AUTH_CREDS_KEY = 'hairology_founder_creds_v1';
+
+function getStoredFounderCode(): string {
+  try {
+    const saved = localStorage.getItem(FOUNDER_CODE_STORAGE_KEY);
+    if (saved && saved.trim().length >= 4) return saved.trim();
+  } catch {
+    // ignore
+  }
+  return DEFAULT_STATIC_FOUNDER_CODE;
+}
+
+async function tryParseJson(res: Response): Promise<Record<string, unknown> | null> {
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) return null;
+  try {
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 type OrderFilterType =
   | 'ALL'
@@ -59,6 +81,7 @@ export const AdminDispatchModal: React.FC = () => {
     founderResetAllOrders,
     firebaseAdminEmail,
     isFirebaseCloudConnected,
+    firebaseSyncError,
     connectFirebaseCloudSync
   } = useCart();
 
@@ -143,21 +166,41 @@ export const AdminDispatchModal: React.FC = () => {
     }
     setIsAuthenticating(true);
     try {
-      const res = await fetch('/api/founder/verify-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalized })
-      });
-      const data = await res.json();
-      if (res.ok && data.valid) {
-        setEmailError(null);
-        setCodeError(null);
-        setAuthStep('code');
-      } else {
-        setEmailError(data.error || 'Access denied. This Gmail address is not authorized for this panel.');
+      let handledByServer = false;
+      try {
+        const res = await fetch('/api/founder/verify-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: normalized })
+        });
+        const data = await tryParseJson(res);
+        if (data !== null) {
+          handledByServer = true;
+          if (res.ok && data.valid) {
+            setEmailError(null);
+            setCodeError(null);
+            setAuthStep('code');
+          } else {
+            setEmailError(
+              typeof data.error === 'string'
+                ? data.error
+                : 'Access denied. This Gmail address is not authorized for this panel.'
+            );
+          }
+        }
+      } catch {
+        // Static / Vercel hosting fallback
       }
-    } catch {
-      setEmailError('Unable to reach verification server. Please try again.');
+
+      if (!handledByServer) {
+        if (normalized === AUTHORIZED_FOUNDER_EMAIL) {
+          setEmailError(null);
+          setCodeError(null);
+          setAuthStep('code');
+        } else {
+          setEmailError('This Gmail address is not authorized for this panel.');
+        }
+      }
     } finally {
       setIsAuthenticating(false);
     }
@@ -173,13 +216,41 @@ export const AdminDispatchModal: React.FC = () => {
     }
     setIsAuthenticating(true);
     try {
-      const res = await fetch('/api/founder/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, code: cleanCode })
-      });
-      const data = await res.json();
-      if (res.ok && data.authenticated) {
+      let handledByServer = false;
+      let authenticated = false;
+
+      try {
+        const res = await fetch('/api/founder/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, code: cleanCode })
+        });
+        const data = await tryParseJson(res);
+        if (data !== null) {
+          handledByServer = true;
+          if (res.ok && data.authenticated) {
+            authenticated = true;
+          } else {
+            setCodeError(
+              typeof data.error === 'string'
+                ? data.error
+                : 'Incorrect security code. Please check and try again.'
+            );
+          }
+        }
+      } catch {
+        // Static / Vercel hosting fallback
+      }
+
+      if (!handledByServer) {
+        if (cleanEmail === AUTHORIZED_FOUNDER_EMAIL && cleanCode === getStoredFounderCode()) {
+          authenticated = true;
+        } else {
+          setCodeError('Incorrect security code. Please check and try again.');
+        }
+      }
+
+      if (authenticated) {
         const creds = { email: cleanEmail, code: cleanCode };
         sessionStorage.setItem(AUTH_SESSION_KEY, 'true');
         sessionStorage.setItem(AUTH_CREDS_KEY, JSON.stringify(creds));
@@ -188,11 +259,7 @@ export const AdminDispatchModal: React.FC = () => {
         setCodeError(null);
         setCodeInput('');
         await fetchFounderOrders(creds.email, creds.code);
-      } else {
-        setCodeError(data.error || 'Incorrect security code. Please check and try again.');
       }
-    } catch {
-      setCodeError('Network error while verifying security code.');
     } finally {
       setIsAuthenticating(false);
     }
@@ -228,31 +295,49 @@ export const AdminDispatchModal: React.FC = () => {
       return;
     }
     try {
-      const res = await fetch('/api/founder/change-code', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-founder-email': savedCreds.email,
-          'x-founder-code': savedCreds.code
-        },
-        body: JSON.stringify({ newCode: trimmed })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setCodeChangeMsg(data.error || 'Could not update code');
-        return;
+      let handledByServer = false;
+      let updated = false;
+      try {
+        const res = await fetch('/api/founder/change-code', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-founder-email': savedCreds.email,
+            'x-founder-code': savedCreds.code
+          },
+          body: JSON.stringify({ newCode: trimmed })
+        });
+        const data = await tryParseJson(res);
+        if (data !== null) {
+          handledByServer = true;
+          if (res.ok) {
+            updated = true;
+          } else {
+            setCodeChangeMsg(typeof data.error === 'string' ? data.error : 'Could not update code');
+          }
+        }
+      } catch {
+        // Static / Vercel hosting fallback
       }
-      const nextCreds = { ...savedCreds, code: trimmed };
-      sessionStorage.setItem(AUTH_CREDS_KEY, JSON.stringify(nextCreds));
-      setSavedCreds(nextCreds);
-      setCodeChangeMsg('Access code updated successfully!');
-      setTimeout(() => {
-        setCodeChangeMsg(null);
-        setShowChangeCode(false);
-        setNewCode('');
-      }, 1500);
+
+      if (!handledByServer) {
+        localStorage.setItem(FOUNDER_CODE_STORAGE_KEY, trimmed);
+        updated = true;
+      }
+
+      if (updated) {
+        const nextCreds = { ...savedCreds, code: trimmed };
+        sessionStorage.setItem(AUTH_CREDS_KEY, JSON.stringify(nextCreds));
+        setSavedCreds(nextCreds);
+        setCodeChangeMsg('Access code updated successfully!');
+        setTimeout(() => {
+          setCodeChangeMsg(null);
+          setShowChangeCode(false);
+          setNewCode('');
+        }, 1500);
+      }
     } catch {
-      setCodeChangeMsg('Network error updating access code');
+      setCodeChangeMsg('Unable to update access code');
     }
   };
 
@@ -779,6 +864,34 @@ export const AdminDispatchModal: React.FC = () => {
           <div className="bg-emerald-900 text-emerald-100 text-xs py-2 px-4 text-center border-b border-emerald-700 flex items-center justify-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
             <span>{whatsappToast}</span>
+          </div>
+        )}
+
+        {/* Firebase Cloud Sync Notice Banner (for multi-device live sync on Vercel / web) */}
+        {!isFirebaseCloudConnected && (
+          <div className="bg-[#262018] border-b border-[#C5A880]/30 px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+            <div className="text-[#E8DFD1] flex items-center gap-2 text-center sm:text-left">
+              <Database className="w-4 h-4 text-[#C5A880] shrink-0 hidden sm:block" />
+              <span>
+                {firebaseSyncError
+                  ? firebaseSyncError
+                  : 'Connect Firebase Cloud Sync to view and confirm orders placed from customer phones in real time.'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await connectFirebaseCloudSync();
+                if (res.ok) {
+                  showToast('Firebase Firestore Cloud Sync connected!');
+                } else if (res.error) {
+                  showToast(res.error, 6000);
+                }
+              }}
+              className="px-3 py-1.5 bg-[#C5A880] hover:bg-[#d4b993] text-[#121110] font-bold rounded-lg text-[11px] uppercase tracking-wider shrink-0 cursor-pointer"
+            >
+              Connect Cloud Sync
+            </button>
           </div>
         )}
 

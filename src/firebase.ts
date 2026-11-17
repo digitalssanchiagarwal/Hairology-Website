@@ -110,8 +110,18 @@ export function subscribeToFirebaseAuth(callback: (user: FirebaseUser | null) =>
 }
 
 export async function signInFounderWithGoogle(): Promise<FirebaseUser> {
-  const result = await signInWithPopup(auth, googleProvider);
-  return result.user;
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code || '';
+    if (code === 'auth/unauthorized-domain' && typeof window !== 'undefined') {
+      throw new Error(
+        `Authorize domain "${window.location.hostname}" in Firebase Console → Authentication → Settings → Authorized domains to sync cloud orders from this live site.`
+      );
+    }
+    throw err;
+  }
 }
 
 export async function signOutFounderGoogle(): Promise<void> {
@@ -224,6 +234,41 @@ export function subscribeToPublicOrderStatus(
       console.warn(`Firestore public status listener notice on ${path}:`, error?.message || error);
     }
   );
+}
+
+export async function fetchAllOrdersAdminOnce(): Promise<Order[]> {
+  const path = 'orders';
+  try {
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => {
+      const data = d.data();
+      return {
+        id: String(data.id || d.id),
+        createdAt: typeof data.createdAtIso === 'string' ? data.createdAtIso : new Date().toISOString(),
+        customerPhone: String(data.customerPhone || ''),
+        deliveryAddress: data.deliveryAddress as Order['deliveryAddress'],
+        items: Array.isArray(data.items) ? (data.items as CartItem[]) : [],
+        subtotal: Number(data.subtotal || 0),
+        discount: Number(data.discount || 0),
+        shipping: Number(data.shipping || 0),
+        codFee: Number(data.codFee || 0),
+        total: Number(data.total || 0),
+        paymentMethod: (data.paymentMethod as Order['paymentMethod']) || 'UPI_QR',
+        paymentStatus: (data.paymentStatus as Order['paymentStatus']) || 'PENDING',
+        orderStatus: (data.orderStatus as Order['orderStatus']) || 'PENDING_CONFIRMATION',
+        payerUpi: typeof data.payerUpi === 'string' ? data.payerUpi : undefined,
+        trackingNumber: typeof data.trackingNumber === 'string' ? data.trackingNumber : undefined,
+        gatewayTransactionId:
+          typeof data.gatewayTransactionId === 'string' ? data.gatewayTransactionId : undefined,
+        paymentVerifiedAt: typeof data.paymentVerifiedAt === 'string' ? data.paymentVerifiedAt : undefined,
+        paymentFailureReason:
+          typeof data.paymentFailureReason === 'string' ? data.paymentFailureReason : undefined,
+      };
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
 }
 
 export function subscribeToAllOrdersAdmin(
