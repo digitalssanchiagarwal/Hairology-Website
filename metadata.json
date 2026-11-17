@@ -1,0 +1,6 @@
+{
+  "name": "HAIROLOGY — Haute-Beauté D2C Haircare",
+  "description": "Haute-beauté D2C haircare formulated for Indian water. Steam-activated chelating shampoo, bio-identical protein formulas, instant UPI checkout, and master admin integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

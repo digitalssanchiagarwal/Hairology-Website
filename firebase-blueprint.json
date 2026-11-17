@@ -1,0 +1,190 @@
+{
+  "entities": {
+    "Order": {
+      "title": "Order",
+      "description": "Complete customer D2C order with PII delivery address, itemized cart, UPI payment status, and dispatch tracking.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAtIso": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "customerPhone": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 20
+        },
+        "deliveryAddress": {
+          "type": "object",
+          "description": "Customer recipient name, mobile, street address, city, state, and 6-digit pincode."
+        },
+        "items": {
+          "type": "array",
+          "description": "Bounded list (1-20) of ordered product items."
+        },
+        "subtotal": { "type": "number" },
+        "discount": { "type": "number" },
+        "shipping": { "type": "number" },
+        "codFee": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["UPI_QR"]
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["PENDING", "PAID", "FAILED", "REFUNDED"]
+        },
+        "orderStatus": {
+          "type": "string",
+          "enum": [
+            "PENDING_CONFIRMATION",
+            "CONFIRMED",
+            "DISPATCHED",
+            "OUT_FOR_DELIVERY",
+            "DELIVERED",
+            "PAYMENT_FAILED"
+          ]
+        },
+        "payerUpi": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "trackingNumber": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "gatewayTransactionId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "paymentVerifiedAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "paymentFailureReason": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "createdAtIso",
+        "customerPhone",
+        "deliveryAddress",
+        "items",
+        "subtotal",
+        "discount",
+        "shipping",
+        "codFee",
+        "total",
+        "paymentMethod",
+        "paymentStatus",
+        "orderStatus",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "OrderStatusPublic": {
+      "title": "OrderStatusPublic",
+      "description": "PII-free split document holding only payment and order status so the checkout waiting screen can observe live payment verification.",
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["PENDING", "PAID", "FAILED", "REFUNDED"]
+        },
+        "orderStatus": {
+          "type": "string",
+          "enum": [
+            "PENDING_CONFIRMATION",
+            "CONFIRMED",
+            "DISPATCHED",
+            "OUT_FOR_DELIVERY",
+            "DELIVERED",
+            "PAYMENT_FAILED"
+          ]
+        },
+        "total": { "type": "number" },
+        "trackingNumber": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "gatewayTransactionId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "paymentFailureReason": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "orderId",
+        "paymentStatus",
+        "orderStatus",
+        "total",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized founder/admin identity document.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "enum": ["founder"]
+        }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Full customer orders containing PII (restricted strictly to verified founder/admin reads and updates; strict PENDING-only validated creation)."
+    },
+    "/orderStatuses/{orderId}": {
+      "schema": { "$ref": "#/entities/OrderStatusPublic" },
+      "description": "PII-free payment status mirror for live customer checkout polling/listening without exposing PII."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Founder/admin role records."
+    }
+  }
+}

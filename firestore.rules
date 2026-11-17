@@ -1,0 +1,232 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Pillar 4 Global Safety Net: Default-deny all paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ================= HELPER PRIMITIVES =================
+    function isValidId(id) {
+      return id is string && id.size() >= 6 && id.size() <= 32 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (
+          request.auth.token.email_verified == true &&
+          (
+            request.auth.token.email == 'digitalssanchiagarwal@gmail.com' ||
+            request.auth.token.email == 'guddan1102@gmail.com'
+          )
+        )
+      );
+    }
+
+    function isValidDeliveryAddress(addr) {
+      return addr is map &&
+        addr.keys().hasAll(['recipientName', 'phoneNumber', 'streetAddress', 'city', 'state', 'pincode']) &&
+        addr.keys().hasOnly(['recipientName', 'phoneNumber', 'streetAddress', 'city', 'state', 'pincode']) &&
+        addr.recipientName is string && addr.recipientName.size() >= 2 && addr.recipientName.size() <= 100 &&
+        addr.phoneNumber is string && addr.phoneNumber.size() >= 10 && addr.phoneNumber.size() <= 20 &&
+        addr.streetAddress is string && addr.streetAddress.size() >= 5 && addr.streetAddress.size() <= 300 &&
+        addr.city is string && addr.city.size() >= 2 && addr.city.size() <= 80 &&
+        addr.state is string && addr.state.size() >= 2 && addr.state.size() <= 80 &&
+        addr.pincode is string && addr.pincode.size() == 6 && addr.pincode.matches('^[0-9]{6}$');
+    }
+
+    function isValidOrderItems(items) {
+      return items is list &&
+        items.size() >= 1 &&
+        items.size() <= 20 &&
+        items[0] is map &&
+        items[0].keys().hasAll(['productId', 'variantId', 'productName', 'variantLabel', 'price', 'mrp', 'quantity']) &&
+        items[0].productId is string && items[0].productId.size() >= 1 && items[0].productId.size() <= 64 &&
+        items[0].productName is string && items[0].productName.size() >= 1 && items[0].productName.size() <= 150 &&
+        items[0].price is number && items[0].price >= 0 &&
+        items[0].quantity is number && items[0].quantity >= 1 && items[0].quantity <= 50;
+    }
+
+    function isValidOrder(data, orderId) {
+      return data is map &&
+        data.keys().hasAll([
+          'id', 'createdAtIso', 'customerPhone', 'deliveryAddress', 'items',
+          'subtotal', 'discount', 'shipping', 'codFee', 'total',
+          'paymentMethod', 'paymentStatus', 'orderStatus', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'createdAtIso', 'customerPhone', 'deliveryAddress', 'items',
+          'subtotal', 'discount', 'shipping', 'codFee', 'total',
+          'paymentMethod', 'paymentStatus', 'orderStatus',
+          'payerUpi', 'trackingNumber', 'gatewayTransactionId',
+          'paymentVerifiedAt', 'paymentFailureReason', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id == orderId && data.id.size() >= 6 && data.id.size() <= 32 &&
+        data.createdAtIso is string && data.createdAtIso.size() >= 10 && data.createdAtIso.size() <= 40 &&
+        data.customerPhone is string && data.customerPhone.size() >= 10 && data.customerPhone.size() <= 20 &&
+        isValidDeliveryAddress(data.deliveryAddress) &&
+        isValidOrderItems(data.items) &&
+        data.subtotal is number && data.subtotal >= 0 &&
+        data.discount is number && data.discount == 0 &&
+        data.shipping is number && data.shipping >= 0 &&
+        data.codFee is number && data.codFee == 0 &&
+        data.total is number && data.total > 0 &&
+        data.paymentMethod is string && data.paymentMethod in ['UPI_QR', 'UPI'] &&
+        data.paymentStatus is string && data.paymentStatus in ['PENDING', 'PAID', 'FAILED', 'REFUNDED'] &&
+        data.orderStatus is string && data.orderStatus in ['PENDING_CONFIRMATION', 'CONFIRMED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'PAYMENT_FAILED'] &&
+        (!('payerUpi' in data) || (data.payerUpi is string && data.payerUpi.size() <= 64)) &&
+        (!('trackingNumber' in data) || (data.trackingNumber is string && data.trackingNumber.size() <= 64)) &&
+        (!('gatewayTransactionId' in data) || (data.gatewayTransactionId is string && data.gatewayTransactionId.size() <= 64)) &&
+        (!('paymentVerifiedAt' in data) || (data.paymentVerifiedAt is string && data.paymentVerifiedAt.size() <= 40)) &&
+        (!('paymentFailureReason' in data) || (data.paymentFailureReason is string && data.paymentFailureReason.size() <= 200)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidOrderStatusPublic(data, orderId) {
+      return data is map &&
+        data.keys().hasAll(['orderId', 'paymentStatus', 'orderStatus', 'total', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'orderId', 'paymentStatus', 'orderStatus', 'total',
+          'trackingNumber', 'gatewayTransactionId', 'paymentFailureReason',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.orderId is string && data.orderId == orderId && data.orderId.size() >= 6 && data.orderId.size() <= 32 &&
+        data.paymentStatus is string && data.paymentStatus in ['PENDING', 'PAID', 'FAILED', 'REFUNDED'] &&
+        data.orderStatus is string && data.orderStatus in ['PENDING_CONFIRMATION', 'CONFIRMED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'PAYMENT_FAILED'] &&
+        data.total is number && data.total > 0 &&
+        (!('trackingNumber' in data) || (data.trackingNumber is string && data.trackingNumber.size() <= 64)) &&
+        (!('gatewayTransactionId' in data) || (data.gatewayTransactionId is string && data.gatewayTransactionId.size() <= 64)) &&
+        (!('paymentFailureReason' in data) || (data.paymentFailureReason is string && data.paymentFailureReason.size() <= 200)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // ================= ORDERS COLLECTION (PII RESTRICTED TO ADMIN) =================
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && isAdmin();
+      allow list: if isAdmin();
+
+      // Atomic creation requires matching public status mirror in the same batch, strictly PENDING
+      allow create: if isValidId(orderId) &&
+        isValidOrder(incoming(), orderId) &&
+        incoming().paymentStatus == 'PENDING' &&
+        incoming().orderStatus == 'PENDING_CONFIRMATION' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/orderStatuses/$(orderId));
+
+      allow update: if isValidId(orderId) &&
+        isAdmin() &&
+        isValidOrder(incoming(), orderId) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().createdAtIso == existing().createdAtIso &&
+        incoming().customerPhone == existing().customerPhone &&
+        incoming().deliveryAddress == existing().deliveryAddress &&
+        incoming().items == existing().items &&
+        incoming().subtotal == existing().subtotal &&
+        incoming().total == existing().total &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            // Action: Verify UPI payment received
+            existing().paymentStatus != 'PAID' &&
+            incoming().paymentStatus == 'PAID' &&
+            incoming().orderStatus == 'CONFIRMED' &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'paymentStatus', 'orderStatus', 'gatewayTransactionId',
+              'paymentVerifiedAt', 'paymentFailureReason', 'updatedAt'
+            ])
+          ) ||
+          (
+            // Action: Mark payment failed
+            existing().paymentStatus != 'PAID' &&
+            incoming().paymentStatus == 'FAILED' &&
+            incoming().orderStatus == 'PAYMENT_FAILED' &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'paymentStatus', 'orderStatus', 'paymentFailureReason', 'updatedAt'
+            ])
+          ) ||
+          (
+            // Action: Advance delivery status (only when PAID)
+            existing().paymentStatus == 'PAID' &&
+            incoming().paymentStatus == 'PAID' &&
+            incoming().orderStatus in ['CONFIRMED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['orderStatus', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(orderId) && isAdmin();
+    }
+
+    // ================= PUBLIC ORDER STATUS MIRROR (ZERO PII) =================
+    match /orderStatuses/{orderId} {
+      allow get: if isValidId(orderId);
+      allow list: if false;
+
+      allow create: if isValidId(orderId) &&
+        isValidOrderStatusPublic(incoming(), orderId) &&
+        incoming().paymentStatus == 'PENDING' &&
+        incoming().orderStatus == 'PENDING_CONFIRMATION' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/orders/$(orderId));
+
+      allow update: if isValidId(orderId) &&
+        isAdmin() &&
+        isValidOrderStatusPublic(incoming(), orderId) &&
+        incoming().orderId == existing().orderId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().total == existing().total &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            existing().paymentStatus != 'PAID' &&
+            incoming().paymentStatus == 'PAID' &&
+            incoming().orderStatus == 'CONFIRMED' &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'paymentStatus', 'orderStatus', 'gatewayTransactionId',
+              'paymentFailureReason', 'updatedAt'
+            ])
+          ) ||
+          (
+            existing().paymentStatus != 'PAID' &&
+            incoming().paymentStatus == 'FAILED' &&
+            incoming().orderStatus == 'PAYMENT_FAILED' &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'paymentStatus', 'orderStatus', 'paymentFailureReason', 'updatedAt'
+            ])
+          ) ||
+          (
+            existing().paymentStatus == 'PAID' &&
+            incoming().paymentStatus == 'PAID' &&
+            incoming().orderStatus in ['CONFIRMED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['orderStatus', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(orderId) && isAdmin();
+    }
+
+    // ================= ADMINS REGISTRY =================
+    match /admins/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list, create, update, delete: if false;
+    }
+  }
+}

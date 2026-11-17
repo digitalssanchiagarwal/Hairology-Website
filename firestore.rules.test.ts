@@ -1,0 +1,100 @@
+/**
+ * Phase 0 Red Team Test Specification ("Dirty Dozen" Payloads)
+ * Verifies that all unauthorized PII reads, status escalations, shadow fields,
+ * unverified admin spoofs, ID poisoning, and collection scrapes are rejected.
+ */
+
+export const DIRTY_DOZEN_SECURITY_CASES = [
+  {
+    name: '1. Unauthenticated PII Read',
+    operation: 'get',
+    path: '/orders/HR-2026-1001',
+    auth: null,
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '2. Non-Admin Order List Scrape',
+    operation: 'list',
+    path: '/orders',
+    auth: { uid: 'stranger-1', token: { email: 'stranger@gmail.com', email_verified: true } },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '3. Public OrderStatus List Scrape',
+    operation: 'list',
+    path: '/orderStatuses',
+    auth: null,
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '4. Customer Self-Confirmed PAID Bypass on Create',
+    operation: 'create',
+    path: '/orders/HR-2026-1002',
+    auth: null,
+    payload: { id: 'HR-2026-1002', paymentStatus: 'PAID', orderStatus: 'CONFIRMED', total: 849 },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '5. Customer Self-Confirmed PAID Bypass on OrderStatus',
+    operation: 'create',
+    path: '/orderStatuses/HR-2026-1002',
+    auth: null,
+    payload: { orderId: 'HR-2026-1002', paymentStatus: 'PAID', orderStatus: 'DELIVERED', total: 849 },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '6. Shadow Ghost Field Injection',
+    operation: 'create',
+    path: '/orders/HR-2026-1003',
+    auth: null,
+    payload: { id: 'HR-2026-1003', paymentStatus: 'PENDING', isAdminApproved: true },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '7. Unverified Founder Email Spoof',
+    operation: 'list',
+    path: '/orders',
+    auth: { uid: 'spoof-1', token: { email: 'guddan1102@gmail.com', email_verified: false } },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '8. ID Poisoning Attack',
+    operation: 'create',
+    path: '/orders/bad$id',
+    auth: null,
+    payload: { id: 'bad$id', paymentStatus: 'PENDING' },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '9. String Overflow Resource Poisoning',
+    operation: 'create',
+    path: '/orders/HR-2026-1004',
+    auth: null,
+    payload: { id: 'HR-2026-1004', deliveryAddress: { streetAddress: 'x'.repeat(2000) } },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '10. Client-Forged Backdated Timestamp',
+    operation: 'create',
+    path: '/orders/HR-2026-1005',
+    auth: null,
+    payload: { id: 'HR-2026-1005', createdAt: '2020-01-01T00:00:00Z' },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '11. Non-Admin Payment Escalation Update',
+    operation: 'update',
+    path: '/orders/HR-2026-1001',
+    auth: { uid: 'stranger-1', token: { email: 'stranger@gmail.com', email_verified: true } },
+    payload: { paymentStatus: 'PAID', orderStatus: 'CONFIRMED' },
+    expected: 'PERMISSION_DENIED',
+  },
+  {
+    name: '12. Self-Assigned Admin Privilege Escalation',
+    operation: 'create',
+    path: '/admins/stranger-1',
+    auth: { uid: 'stranger-1', token: { email: 'stranger@gmail.com', email_verified: true } },
+    payload: { email: 'stranger@gmail.com', role: 'founder' },
+    expected: 'PERMISSION_DENIED',
+  },
+];
