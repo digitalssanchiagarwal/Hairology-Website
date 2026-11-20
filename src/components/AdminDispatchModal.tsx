@@ -29,7 +29,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { ADMIN_PHONE, USER_UPI_ID } from '../data/products';
+import { ADMIN_PHONE, PRODUCTS, USER_UPI_ID } from '../data/products';
 import { Order } from '../types';
 
 const AUTHORIZED_FOUNDER_EMAIL = 'guddan1102@gmail.com';
@@ -374,7 +374,8 @@ export const AdminDispatchModal: React.FC = () => {
       ord.customerPhone.toLowerCase().includes(q) ||
       ord.deliveryAddress.city.toLowerCase().includes(q) ||
       ord.deliveryAddress.pincode.includes(q) ||
-      (ord.gatewayTransactionId || '').toLowerCase().includes(q)
+      (ord.gatewayTransactionId || '').toLowerCase().includes(q) ||
+      ord.items.some(it => it.productName.toLowerCase().includes(q))
     );
   });
 
@@ -639,7 +640,50 @@ export const AdminDispatchModal: React.FC = () => {
   }
 
   // ================= 2. FULL AUTHENTICATED FOUNDER ANALYTICS & CONTROL HUB =================
-  const maxProductRevenue = Math.max(1, ...analytics.productWiseSales.map(p => p.revenue));
+  const analyticsById = new Map(analytics.productWiseSales.map(p => [p.productId, p]));
+  const catalogProductMetrics = PRODUCTS.map((catalogProd, index) => {
+    const metric = analyticsById.get(catalogProd.id);
+    const primaryVariant = catalogProd.variants[0];
+    const discountPct =
+      catalogProd.id === 'hot-water-rosemary-duo' || catalogProd.id === 'protein-rosemary-duo'
+        ? 13
+        : Math.round(((primaryVariant.mrp - primaryVariant.price) / primaryVariant.mrp) * 100);
+    return {
+      rank: index + 1,
+      productId: catalogProd.id,
+      productName: catalogProd.name,
+      image: catalogProd.image,
+      size: primaryVariant.size,
+      price: primaryVariant.price,
+      mrp: primaryVariant.mrp,
+      discountPct,
+      unitsSold: metric?.unitsSold || 0,
+      revenue: metric?.revenue || 0,
+      paidOrdersCount: metric?.paidOrdersCount || 0,
+      pendingUnits: metric?.pendingUnits || 0,
+      failedUnits: metric?.failedUnits || 0,
+    };
+  });
+  for (const extra of analytics.productWiseSales) {
+    if (!PRODUCTS.some(p => p.id === extra.productId)) {
+      catalogProductMetrics.push({
+        rank: catalogProductMetrics.length + 1,
+        productId: extra.productId,
+        productName: extra.productName,
+        image: PRODUCTS[0]?.image || '',
+        size: '250 ml',
+        price: 0,
+        mrp: 0,
+        discountPct: 0,
+        unitsSold: extra.unitsSold,
+        revenue: extra.revenue,
+        paidOrdersCount: extra.paidOrdersCount,
+        pendingUnits: extra.pendingUnits,
+        failedUnits: extra.failedUnits,
+      });
+    }
+  }
+  const maxProductRevenue = Math.max(1, ...catalogProductMetrics.map(p => p.revenue));
 
   return (
     <div className="fixed inset-0 z-50 bg-[#121110]/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-5 overflow-y-auto">
@@ -829,7 +873,7 @@ export const AdminDispatchModal: React.FC = () => {
             }`}
           >
             <BarChart3 className="w-4 h-4" />
-            <span>Product-Wise Sales</span>
+            <span>Product-Wise Sales ({PRODUCTS.length})</span>
           </button>
 
           <button
@@ -1035,7 +1079,7 @@ export const AdminDispatchModal: React.FC = () => {
                   type="text"
                   value={orderSearchQuery}
                   onChange={e => setOrderSearchQuery(e.target.value)}
-                  placeholder="Search customer name, phone no, order ID, UPI UTR..."
+                  placeholder="Search customer name, phone no, product, order ID, UTR..."
                   className="w-full text-xs px-3.5 py-2.5 bg-[#121110] border border-white/15 rounded-xl text-white placeholder-[#8A7463] outline-none focus:border-[#C5A880]"
                 />
 
@@ -1478,22 +1522,43 @@ export const AdminDispatchModal: React.FC = () => {
             </div>
 
             {/* Product Metric Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {analytics.productWiseSales.map(prod => {
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {catalogProductMetrics.map(prod => {
                 const sharePct = analytics.totalSales > 0 ? Math.round((prod.revenue / analytics.totalSales) * 100) : 0;
                 const barWidth = Math.round((prod.revenue / maxProductRevenue) * 100);
                 return (
                   <div key={prod.productId} className="bg-[#23201D] p-5 rounded-2xl border border-white/10 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-[#C5A880]">
-                          {prod.productId}
-                        </span>
-                        <h5 className="font-serif text-base font-bold text-white mt-0.5">
-                          {prod.productName}
-                        </h5>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        {prod.image && (
+                          <img
+                            src={prod.image}
+                            alt={prod.productName}
+                            className="w-12 h-14 rounded-xl object-cover border border-[#C5A880]/30 shrink-0 bg-[#121110]"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-mono font-bold bg-[#121110] text-[#C5A880] px-1.5 py-0.5 rounded border border-[#C5A880]/30">
+                              #{prod.rank}
+                            </span>
+                            <span className="text-[10px] font-mono text-[#8A7463]">{prod.size}</span>
+                          </div>
+                          <h5 className="font-serif text-base font-bold text-white mt-1 leading-snug">
+                            {prod.productName}
+                          </h5>
+                          {prod.price > 0 && (
+                            <div className="flex items-center gap-2 mt-1 text-xs font-mono">
+                              <span className="font-bold text-[#C5A880]">₹{prod.price.toLocaleString('en-IN')}</span>
+                              <span className="line-through text-[#8A7463] text-[11px]">₹{prod.mrp.toLocaleString('en-IN')}</span>
+                              <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/60 px-1.5 py-0.5 rounded">
+                                {prod.discountPct}% OFF
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-[11px] font-mono font-bold bg-[#121110] text-[#C5A880] px-2 py-1 rounded-lg border border-[#C5A880]/30">
+                      <span className="text-[11px] font-mono font-bold bg-[#121110] text-[#C5A880] px-2 py-1 rounded-lg border border-[#C5A880]/30 shrink-0">
                         {sharePct}% share
                       </span>
                     </div>
@@ -1533,24 +1598,51 @@ export const AdminDispatchModal: React.FC = () => {
             {/* Product-Wise Table */}
             <div className="bg-[#23201D] p-5 rounded-2xl border border-white/10">
               <div className="text-xs font-bold uppercase tracking-wider text-white mb-3">
-                Product Performance Ledger
+                Product Performance &amp; Live Catalog Pricing Ledger ({catalogProductMetrics.length} Products)
               </div>
               <div className="overflow-x-auto rounded-xl border border-white/10">
                 <table className="w-full text-left text-xs text-[#E8DFD1]">
                   <thead className="bg-[#121110] text-[#C5A880] uppercase tracking-wider text-[10px] font-mono border-b border-white/10">
                     <tr>
+                      <th className="py-3 px-4">#</th>
                       <th className="py-3 px-4">Product Name</th>
+                      <th className="py-3 px-4">Size</th>
+                      <th className="py-3 px-4">Live Price (MRP)</th>
                       <th className="py-3 px-4">Units Sold (Paid)</th>
                       <th className="py-3 px-4">Paid Orders</th>
-                      <th className="py-3 px-4">Pending Units</th>
-                      <th className="py-3 px-4">Failed Units</th>
+                      <th className="py-3 px-4">Pending</th>
+                      <th className="py-3 px-4">Failed</th>
                       <th className="py-3 px-4 text-right">Net Revenue (INR)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {analytics.productWiseSales.map(prod => (
+                    {catalogProductMetrics.map(prod => (
                       <tr key={prod.productId} className="hover:bg-white/5">
-                        <td className="py-3 px-4 font-semibold text-white">{prod.productName}</td>
+                        <td className="py-3 px-4 font-mono text-[#C5A880] font-bold">{prod.rank}</td>
+                        <td className="py-3 px-4 font-semibold text-white">
+                          <div className="flex items-center gap-2.5">
+                            {prod.image && (
+                              <img
+                                src={prod.image}
+                                alt={prod.productName}
+                                className="w-8 h-9 rounded-md object-cover border border-white/10 shrink-0"
+                              />
+                            )}
+                            <span>{prod.productName}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-[#8A7463] whitespace-nowrap">{prod.size}</td>
+                        <td className="py-3 px-4 font-mono whitespace-nowrap">
+                          {prod.price > 0 ? (
+                            <span>
+                              <strong className="text-[#C5A880]">₹{prod.price}</strong>{' '}
+                              <span className="line-through text-[#8A7463] text-[10px]">₹{prod.mrp}</span>{' '}
+                              <span className="text-emerald-300 text-[10px]">({prod.discountPct}%)</span>
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                         <td className="py-3 px-4 font-mono">{prod.unitsSold}</td>
                         <td className="py-3 px-4 font-mono text-emerald-300">{prod.paidOrdersCount}</td>
                         <td className="py-3 px-4 font-mono text-amber-300">{prod.pendingUnits}</td>
@@ -1595,7 +1687,7 @@ export const AdminDispatchModal: React.FC = () => {
                 <div className="text-[#8A7463]">// Live Order Notification Payload ({ADMIN_PHONE}):</div>
                 <div className="text-emerald-400">🛍️ HAIROLOGY ORDER DETAILS: #{selectedOrder?.id || 'HR-2026-0001'}</div>
                 <div>UPI Ref: {selectedOrder?.gatewayTransactionId || 'Pending'}</div>
-                <div>Total: ₹{selectedOrder?.total || 849} ({selectedOrder?.paymentStatus || 'PAID'})</div>
+                <div>Total: ₹{selectedOrder?.total || 1299} ({selectedOrder?.paymentStatus || 'PAID'})</div>
                 <div>Customer: {selectedOrder?.deliveryAddress.recipientName || 'Customer Name'} ({selectedOrder?.customerPhone || '+91 XXXXXXXXXX'})</div>
               </div>
 

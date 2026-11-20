@@ -5,8 +5,16 @@ export const PRODUCT_IMAGE_HOT_WATER_STANDALONE = '/assets/aistudio/hot_water_st
 export const PRODUCT_IMAGE_HOT_WATER_BACK = '/assets/aistudio/hot_water_back.webp';
 export const PRODUCT_IMAGE_PROTEIN = '/assets/aistudio/protein_front.webp';
 export const PRODUCT_IMAGE_PROTEIN_BACK = '/assets/aistudio/protein_back.webp';
+export const PRODUCT_IMAGE_CONDITIONER = '/assets/aistudio/IMG_4053_4b617b36.PNG';
+export const PRODUCT_IMAGE_CONDITIONER_BACK = '/assets/aistudio/IMG_4057_1e82fc3d.PNG';
 export const PRODUCT_IMAGE_DUO = '/assets/aistudio/duo_hero.webp';
-export const USER_HERO_IMAGE = PRODUCT_IMAGE_DUO;
+export const PRODUCT_IMAGE_HOT_WATER_ROSEMARY = '/assets/aistudio/IMG_4047_6434eb6d.PNG';
+export const PRODUCT_IMAGE_PROTEIN_ROSEMARY = '/assets/aistudio/IMG_4055_fb4c7d1c.PNG';
+export const PRODUCT_IMAGE_TRIO = '/assets/aistudio/IMG_4051_0f6651aa.PNG';
+export const PRODUCT_IMAGE_TRIO_PORTRAIT = '/assets/aistudio/IMG_4049_ed6c86e5.PNG';
+export const PRODUCT_IMAGE_TRIO_HOT_WATER_BACK = '/assets/aistudio/IMG_3932_21aa9edf.PNG';
+export const PRODUCT_IMAGE_TRIO_PROTEIN_BACK = '/assets/aistudio/IMG_3933_55b5980e.PNG';
+export const USER_HERO_IMAGE = PRODUCT_IMAGE_TRIO_PORTRAIT;
 export const USER_LOGO_IMAGE = '/assets/aistudio/hairology_logo.webp';
 export const USER_VIDEO_URL = '/assets/aistudio/hairology_walkthrough.mp4';
 export const ADMIN_PHONE = '+91 8104559706';
@@ -16,6 +24,105 @@ export const USER_UPI_ID = 'guddan1102@okhdfcbank';
 export const USER_UPI_NAME = 'HAIROLOGY';
 
 export const PRODUCTS: Product[] = [
+  {
+    id: 'the-trio',
+    name: 'The Hairology Trio',
+    tagline: 'Hot Water Shampoo + Protein Shampoo + Rosemary Conditioner (250 ml each)',
+    subtitle: 'Complete 3-Step Indian Hard-Water Wash, Peptide Repair & Botanical Conditioning Regimen',
+    category: 'Complete System Trio',
+    description: 'The complete 3-bottle Hairology ritual for hard Indian water: Hot Water Shampoo (250 ml) with Ectoin to chelate mineral buildup, Protein Shampoo (250 ml) to reconstruct cortical keratin bonds, and Rosemary Conditioner (250 ml) for paraben-free, sulphate-free, gluten-free frizz control and hair-fall reduction.',
+    badge: '★ COMPLETE TRIO',
+    rating: 4.9,
+    reviewsCount: 418,
+    accentColor: '#C5A880',
+    image: PRODUCT_IMAGE_TRIO,
+    variants: [
+      {
+        id: 'trio-full',
+        label: 'Complete Trio (3 x 250 ml)',
+        size: '250 ml',
+        mrp: 1599,
+        price: 1299,
+      }
+    ],
+    activeComplex: 'Thermal Chelation + Bio-Identical Pea Peptides + Rosemary Botanical Seal',
+    benefits: [
+      {
+        title: 'Complete 3-Step Hair Therapy',
+        description: 'Clarify hard-water minerals, rebuild inner keratin strength, and seal cuticles against frizz and breakage.'
+      },
+      {
+        title: 'Hot Water Thermal Chelation',
+        description: 'Steam-activated Ectoin and mild cleansers dissolve calcium, magnesium, and scalp buildup.'
+      },
+      {
+        title: 'Cortical Protein Reconstruction',
+        description: 'Hydrolyzed keratin, wheat protein, and biotin restore bounce, elasticity, and shine.'
+      },
+      {
+        title: 'Rosemary Hair-Fall & Frizz Shield',
+        description: 'Rosemary Leaf Oil, Avocado Oil, Coconut Oil, and Aloe Vera leave hair silky smooth.'
+      }
+    ],
+    howToUse: [
+      {
+        step: 1,
+        title: 'Step 1 — Hot Water Shampoo',
+        instructions: 'Thoroughly wet hair, massage generously into scalp and roots to build a lather, then rinse thoroughly.'
+      },
+      {
+        step: 2,
+        title: 'Step 2 — Protein Shampoo',
+        instructions: 'Alternate on Day 4 wash days: emulsify a coin-sized amount, massage in circular motions, and rinse with cool water.'
+      },
+      {
+        step: 3,
+        title: 'Step 3 — Rosemary Conditioner',
+        instructions: 'After shampooing, massage into wet hair from roots to ends. Leave on for 5–10 minutes and rinse thoroughly.'
+      }
+    ],
+    ingredients: [
+      {
+        name: 'Ectoin & Salicylic Acid (Hot Water Shampoo)',
+        role: 'Thermal hydration shield and gentle scalp chelation',
+        source: 'Bio-protectant complex'
+      },
+      {
+        name: 'Hydrolyzed Keratin & Biotin (Protein Shampoo)',
+        role: 'Strength in every strand with mild sulphate-free cleansers',
+        source: 'Amino peptide matrix'
+      },
+      {
+        name: 'Rosemary Leaf, Avocado & Coconut Oils (Conditioner)',
+        role: 'Reduces hair fall & breakage while controlling frizz',
+        source: 'Cold-nourishing botanical oils'
+      }
+    ],
+    faqs: [
+      {
+        q: 'What bottles are included in The Hairology Trio?',
+        a: 'You receive all three full-size 250 ml bottles: Hot Water Shampoo (250 ml), Protein Shampoo (250 ml), and Rosemary Conditioner (250 ml).'
+      },
+      {
+        q: 'Are all three products paraben-free and sulphate-free?',
+        a: 'Yes. All three Hairology formulations use gentle, sulphate-free and paraben-free ingredients suitable for Indian hair and hard-water regions.'
+      }
+    ],
+    additionalInfo: {
+      shelfLife: '36 Months from date of manufacturing',
+      manufacturer: 'Hairology Haute-Beauté Lab, ISO 9001 & GMP Certified Facility, Haridwar',
+      origin: 'India',
+      supportContact: 'Team HAIROLOGY Care',
+      supportEmail: 'support@hairology.in',
+      licenseNo: 'COS-UK-08/2026/04'
+    },
+    galleryImages: [
+      { id: 't1', title: 'The Hairology Trio Set', type: 'bottle', badge: '3 X 250 ML SET' },
+      { id: 't2', title: 'Hot Water Shampoo Back', type: 'ingredients', badge: 'ENRICHED WITH ECTOIN' },
+      { id: 't3', title: 'Protein Shampoo Back', type: 'benefits', badge: 'STRENGTH IN EVERY STRAND' },
+      { id: 't4', title: 'Rosemary Conditioner Back', type: 'promise', badge: 'PARABEN & SULPHATE FREE' }
+    ]
+  },
   {
     id: 'the-duo',
     name: 'The Hairology Duo (Clarify & Reconstruct)',
@@ -131,6 +238,182 @@ export const PRODUCTS: Product[] = [
       { id: 'g4', title: 'Targeted Follicular Benefits', type: 'benefits', badge: 'CLINICALLY PROVEN' },
       { id: 'g5', title: 'The Hairology Clean Promise', type: 'promise', badge: '100% VEGAN & CLEAN' },
       { id: 'g6', title: 'Real Customer Endorsements', type: 'reviews', badge: 'VERIFIED REVIEWS' }
+    ]
+  },
+  {
+    id: 'hot-water-rosemary-duo',
+    name: 'Hot Water Shampoo + Rosemary Conditioner',
+    tagline: 'Hot Water Shampoo (250 ml) + Rosemary Conditioner (250 ml)',
+    subtitle: 'Thermal Chelation Cleanse + Frizz Control & Hair-Fall Protection Duo',
+    category: 'System Kits & Duos',
+    description: 'Pair thermal hard-water cleansing with botanical conditioning. Hot Water Shampoo (250 ml) enriched with Ectoin removes mineral buildup and protects against warm-water dryness, while Rosemary Conditioner (250 ml) reduces hair fall & breakage and seals cuticles for frizz-free smoothness.',
+    badge: '✦ WASH & CONDITION DUO',
+    rating: 4.8,
+    reviewsCount: 215,
+    accentColor: '#9E3C1B',
+    image: PRODUCT_IMAGE_HOT_WATER_ROSEMARY,
+    variants: [
+      {
+        id: 'hw-rc-full',
+        label: 'Full Size Combo (2 x 250 ml)',
+        size: '250 ml',
+        mrp: 1099,
+        price: 949,
+      }
+    ],
+    activeComplex: 'Ectoin Thermal Shield + Rosmarinus Officinalis Leaf Oil',
+    benefits: [
+      {
+        title: 'Warm-Water Moisture Defense',
+        description: 'Ectoin and mild sulphate-free cleansers purify the scalp without stripping natural lipids.'
+      },
+      {
+        title: 'Reduces Hair Fall & Breakage',
+        description: 'Rosemary Leaf Oil, Avocado Oil, and Vitamin E nourish and strengthen weakened strands.'
+      },
+      {
+        title: 'Frizz Control & Silky Smoothness',
+        description: 'Locks hydration into the cuticle after washing for manageable, smooth hair across all hair types.'
+      },
+      {
+        title: 'Paraben, Sulphate & Gluten Free',
+        description: 'Gentle everyday clean formulations safe for all Indian hair types and colour-treated strands.'
+      }
+    ],
+    howToUse: [
+      {
+        step: 1,
+        title: 'Step 1 — Cleanse with Hot Water Shampoo',
+        instructions: 'Thoroughly wet your hair, apply generously from roots to ends, massage gently into the scalp to lather, and rinse thoroughly.'
+      },
+      {
+        step: 2,
+        title: 'Step 2 — Condition with Rosemary Conditioner',
+        instructions: 'After shampooing, massage conditioner into wet hair from roots to ends. Leave on for 5–10 minutes and rinse thoroughly.'
+      }
+    ],
+    ingredients: [
+      {
+        name: 'Ectoin, Niacinamide & Salicylic Acid (Shampoo)',
+        role: 'Thermal hydration shield and gentle sebum & mineral chelation',
+        source: 'Hot Water Protective Formula'
+      },
+      {
+        name: 'Rosemary Oil, Coconut Oil, Aloe Vera & Avocado Oil (Conditioner)',
+        role: 'Reduces hair fall & breakage while controlling frizz',
+        source: 'Botanical Conditioning Complex'
+      }
+    ],
+    faqs: [
+      {
+        q: 'Q1. What is included in Hot Water Shampoo + Rosemary Conditioner?',
+        a: 'This 2-bottle combo includes one full-size Hot Water Shampoo (250 ml) and one full-size Rosemary Conditioner (250 ml).'
+      },
+      {
+        q: 'Q2. Are both products paraben free, sulphate free, and gluten free?',
+        a: 'Yes! Both Hot Water Shampoo and Rosemary Conditioner are paraben free, sulphate free, and gluten free.'
+      }
+    ],
+    additionalInfo: {
+      shelfLife: '36 Months from date of manufacturing',
+      manufacturer: 'Hairology Haute-Beauté Lab, Haridwar',
+      origin: 'India',
+      supportContact: 'Team HAIROLOGY Care',
+      supportEmail: 'support@hairology.in',
+      licenseNo: 'COS-UK-08/2026/04'
+    },
+    galleryImages: [
+      { id: 'hr1', title: 'Hot Water + Rosemary Bottles', type: 'bottle', badge: '2 X 250 ML COMBO' },
+      { id: 'hr2', title: 'Hot Water Shampoo Back', type: 'ingredients', badge: 'ENRICHED WITH ECTOIN' },
+      { id: 'hr3', title: 'Rosemary Conditioner Back', type: 'benefits', badge: 'FRIZZ CONTROL & SMOOTHENS' }
+    ]
+  },
+  {
+    id: 'protein-rosemary-duo',
+    name: 'Protein + Rosemary conditioner',
+    tagline: 'Protein Shampoo (250 ml) + Rosemary Conditioner (250 ml)',
+    subtitle: 'Strength in Every Strand + Hair-Fall & Frizz Control Duo',
+    category: 'System Kits & Duos',
+    description: 'Rebuild inner strand strength and lock in velvety smoothness. Protein Shampoo (250 ml) with hydrolyzed keratin, wheat protein & biotin strengthens weakened hair, while Rosemary Conditioner (250 ml) reduces hair fall & breakage and tames frizz without parabens, sulphates, or gluten.',
+    badge: '✦ STRENGTH & SMOOTH DUO',
+    rating: 4.8,
+    reviewsCount: 198,
+    accentColor: '#8A7463',
+    image: PRODUCT_IMAGE_PROTEIN_ROSEMARY,
+    variants: [
+      {
+        id: 'pr-rc-full',
+        label: 'Full Size Combo (2 x 250 ml)',
+        size: '250 ml',
+        mrp: 1099,
+        price: 949,
+      }
+    ],
+    activeComplex: 'Hydrolyzed Keratin & Biotin + Rosmarinus Officinalis Leaf Oil',
+    benefits: [
+      {
+        title: 'Cortical Strength & Repair',
+        description: 'Hydrolyzed keratin, wheat protein, and biotin reinforce brittle strands from root to tip.'
+      },
+      {
+        title: 'Reduces Hair Fall & Breakage',
+        description: 'Rosemary Leaf Oil, Avocado Oil, and Vitamin E nourish follicles and cut down snapping.'
+      },
+      {
+        title: 'Frizz Control & Silky Smoothness',
+        description: 'Aloe Vera and botanical conditioning lipids align cuticles for smooth, bouncy hair.'
+      },
+      {
+        title: 'Paraben, Sulphate & Gluten Free',
+        description: 'Clean, gentle formula duo safe for all Indian hair textures and colour-treated hair.'
+      }
+    ],
+    howToUse: [
+      {
+        step: 1,
+        title: 'Step 1 — Wash with Protein Shampoo',
+        instructions: 'Emulsify a coin-sized amount with water, massage gently onto scalp in circular motions, and rinse with cool water.'
+      },
+      {
+        step: 2,
+        title: 'Step 2 — Condition with Rosemary Conditioner',
+        instructions: 'After shampooing, massage conditioner into wet hair from roots to ends, leave on for 5–10 minutes, and rinse thoroughly.'
+      }
+    ],
+    ingredients: [
+      {
+        name: 'Hydrolyzed Keratin, Wheat Protein & Biotin (Shampoo)',
+        role: 'Reinforces hair structure and restores elastic strength',
+        source: 'Protein Reconstructive Formula'
+      },
+      {
+        name: 'Rosemary Oil, Coconut Oil, Aloe Vera & Avocado Oil (Conditioner)',
+        role: 'Reduces hair fall & breakage while controlling frizz',
+        source: 'Botanical Conditioning Complex'
+      }
+    ],
+    faqs: [
+      {
+        q: 'Q1. What bottles are included in Protein + Rosemary conditioner?',
+        a: 'This combo includes one full-size Protein Shampoo (250 ml) and one full-size Rosemary Conditioner (250 ml).'
+      },
+      {
+        q: 'Q2. Is it free from harsh sulphates and parabens?',
+        a: 'Yes! Both Protein Shampoo and Rosemary Conditioner are free from parabens, SLS, and SLES.'
+      }
+    ],
+    additionalInfo: {
+      shelfLife: '36 Months from date of manufacturing',
+      manufacturer: 'Hairology Haute-Beauté Lab, Haridwar',
+      origin: 'India',
+      supportContact: 'Team HAIROLOGY Care',
+      supportEmail: 'support@hairology.in',
+      licenseNo: 'COS-UK-08/2026/04'
+    },
+    galleryImages: [
+      { id: 'pr1', title: 'Protein + Rosemary Bottles', type: 'bottle', badge: '2 X 250 ML COMBO' },
+      { id: 'pr2', title: 'Rosemary Conditioner Back', type: 'benefits', badge: 'FRIZZ CONTROL & SMOOTHENS' },
+      { id: 'pr3', title: 'Protein Shampoo Back', type: 'ingredients', badge: 'STRENGTH IN EVERY STRAND' }
     ]
   },
   {
@@ -352,6 +635,104 @@ export const PRODUCTS: Product[] = [
       { id: 'p4', title: 'Usage & Leave-in Routine', type: 'benefits', badge: 'RECONSTRUCT RITUAL' },
       { id: 'p5', title: 'Cruelty-Free & Vegan', type: 'promise', badge: '100% VEGAN' },
       { id: 'p6', title: 'Customer Testimonials', type: 'reviews', badge: 'HIGH REPEAT' }
+    ]
+  },
+  {
+    id: 'rosemary-conditioner',
+    name: 'ROSEMARY CONDITIONER',
+    tagline: 'Reduces Hair Fall & Breakage • Frizz Control & Smoothens Hair',
+    subtitle: 'Paraben Free • Sulphate Free • Gluten Free • For All Hair Types (250 ml)',
+    category: 'Nourishing Conditioner',
+    description: 'Paraben free, sulphate free, and gluten free. Infused with Rosmarinus Officinalis (Rosemary) Leaf Oil, Coconut Oil, Aloe Vera, Avocado Oil, and Vitamin E to reduce hair fall and breakage, tame frizz, and leave all hair types silky smooth.',
+    badge: '🌿 NEW LAUNCH',
+    rating: 4.8,
+    reviewsCount: 196,
+    accentColor: '#2E5A36',
+    image: PRODUCT_IMAGE_CONDITIONER,
+    variants: [
+      {
+        id: 'rosemary-full',
+        label: 'Full Size (250 ml)',
+        size: '250 ml',
+        mrp: 599,
+        price: 549,
+      }
+    ],
+    activeComplex: 'Rosmarinus Officinalis Leaf Oil + Avocado & Coconut Lipid Shield',
+    benefits: [
+      {
+        title: 'Reduces Hair Fall & Breakage',
+        description: 'Rosemary Leaf Oil and Vitamin E nourish weakened strands from root to tip to minimize snapping and shedding.'
+      },
+      {
+        title: 'Frizz Control & Silky Smoothness',
+        description: 'Seals moisture into the cuticle to calm flyaways and deliver touchable softness across all hair types.'
+      },
+      {
+        title: 'Paraben, Sulphate & Gluten Free',
+        description: 'Clean botanical conditioning emulsion crafted without harsh sulphates, parabens, or gluten.'
+      },
+      {
+        title: 'Avocado, Coconut & Aloe Hydration',
+        description: 'Cold-nourishing botanical oils and Aloe Barbadensis restore bounce without weighing hair down.'
+      }
+    ],
+    howToUse: [
+      {
+        step: 1,
+        title: 'Apply to Wet Hair',
+        instructions: 'After shampooing, apply conditioner generously to wet hair and massage smoothly from roots to ends.'
+      },
+      {
+        step: 2,
+        title: '5–10 Minute Botanical Absorption',
+        instructions: 'Leave on for 5–10 minutes so Rosemary Leaf Oil, Coconut Oil, Aloe Vera, and Avocado Oil deeply condition every strand, then rinse thoroughly.'
+      }
+    ],
+    ingredients: [
+      {
+        name: 'Rosmarinus Officinalis Leaf (Rosemary) Oil',
+        role: 'Strengthens hair follicles, reduces breakage & supports healthy density',
+        source: 'Steam-distilled rosemary botanical oil'
+      },
+      {
+        name: 'Persea Gratissima (Avocado) Oil & Coconut Oil',
+        role: 'Rich natural lipid barrier for instant frizz control and gloss',
+        source: 'Cold-pressed plant oils'
+      },
+      {
+        name: 'Aloe Barbadensis (Aloe Vera)',
+        role: 'Weightless soothing moisture and cuticle alignment',
+        source: 'Fresh botanical aloe extract'
+      },
+      {
+        name: 'Tocopheryl Acetate (Vitamin E)',
+        role: 'Antioxidant strand protection against dryness and environmental stress',
+        source: 'Vitamin E complex'
+      }
+    ],
+    faqs: [
+      {
+        q: 'Is ROSEMARY CONDITIONER free from parabens, sulphates, and gluten?',
+        a: 'Yes! ROSEMARY CONDITIONER is 100% paraben free, sulphate free, and gluten free, formulated safely for all Indian hair types.'
+      },
+      {
+        q: 'How long should I leave it on after shampooing?',
+        a: 'Massage into wet hair from roots to ends after shampooing, leave on for 5–10 minutes for deep softening and frizz control, then rinse thoroughly.'
+      }
+    ],
+    additionalInfo: {
+      shelfLife: '36 Months',
+      manufacturer: 'Hairology Haute-Beauté Lab, Haridwar',
+      origin: 'India',
+      supportContact: 'Team HAIROLOGY Care',
+      supportEmail: 'support@hairology.in',
+      licenseNo: 'COS-UK-08/2026/04'
+    },
+    galleryImages: [
+      { id: 'r1', title: 'Rosemary Conditioner Front', type: 'bottle', badge: '250 ML PUMP BOTTLE' },
+      { id: 'r2', title: 'Directions & Full Ingredients', type: 'ingredients', badge: 'PARABEN & SULPHATE FREE' },
+      { id: 'r3', title: 'Reduces Hair Fall & Frizz', type: 'benefits', badge: 'FOR ALL HAIR TYPES' }
     ]
   }
 ];

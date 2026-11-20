@@ -176,9 +176,13 @@ function computeOrderAnalytics(orders: Order[]): OrderAnalytics {
   const productMap = new Map<string, ProductSalesMetric>();
 
   const catalogDefaults = [
+    { id: 'the-trio', name: 'The Hairology Trio' },
     { id: 'the-duo', name: 'The Hairology Duo (Clarify & Reconstruct)' },
-    { id: 'hot-water-shampoo', name: 'Hot Water Clarifying Shampoo' },
-    { id: 'protein-shampoo', name: 'Protein Reconstruct Shampoo' },
+    { id: 'hot-water-rosemary-duo', name: 'Hot Water Shampoo + Rosemary Conditioner' },
+    { id: 'protein-rosemary-duo', name: 'Protein + Rosemary conditioner' },
+    { id: 'hot-water-shampoo', name: 'Hot Water Shampoo (Heat Shield + Clarify)' },
+    { id: 'protein-shampoo', name: 'Protein Shampoo (Strength in Every Strand)' },
+    { id: 'rosemary-conditioner', name: 'ROSEMARY CONDITIONER' },
   ];
   for (const prod of catalogDefaults) {
     productMap.set(prod.id, {

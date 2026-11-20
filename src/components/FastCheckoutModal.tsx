@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Copy,
   Smartphone
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
@@ -62,7 +61,6 @@ export const FastCheckoutModal: React.FC = () => {
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [dynamicUpiQrUrl, setDynamicUpiQrUrl] = useState<string>('');
   const [useDynamicUpiQr, setUseDynamicUpiQr] = useState(true);
-  const [copiedUpiId, setCopiedUpiId] = useState(false);
 
   const grandTotal = Math.max(0, subtotal + shippingFee);
   const orderNote = pendingOrder ? `Hairology #${pendingOrder.id}` : `Hairology Order Rs.${grandTotal}`;
@@ -299,12 +297,6 @@ export const FastCheckoutModal: React.FC = () => {
       .join('\n');
 
     return `✨ THANK YOU FOR YOUR HAIROLOGY ORDER! ✨\n\nDear ${order.deliveryAddress.recipientName},\nThank you for shopping with HAIROLOGY Haute-Beauté Haircare! Your UPI payment of ₹${order.total} has been confirmed.\n\n📦 ORDER SUMMARY:\n• Order ID: #${order.id}\n• UPI Transaction Ref: ${order.gatewayTransactionId || 'Verified'}\n• Amount Paid: ₹${order.total} (PAID)\n• Date: ${new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}\n\n🛍️ ITEMS ORDERED:\n${itemsList}\n\n📍 DELIVERY ADDRESS:\n${order.deliveryAddress.recipientName}\n${order.deliveryAddress.streetAddress}, ${order.deliveryAddress.city} - ${order.deliveryAddress.pincode} (${order.deliveryAddress.state})\nMobile: ${order.customerPhone}\n\n🚚 DISPATCH & TRACKING:\n• Courier Partner: Delhivery Express\n• AWB Tracking: ${order.trackingNumber}\n• Delivery Window: 2-4 business days across India\n\nHairology team personally packing your order.\n\nThank you for choosing Hairology! 🌿`;
-  };
-
-  const handleCopyUpiId = () => {
-    navigator.clipboard.writeText(USER_UPI_ID);
-    setCopiedUpiId(true);
-    setTimeout(() => setCopiedUpiId(false), 2000);
   };
 
   const handleModalClose = () => {
@@ -702,23 +694,6 @@ export const FastCheckoutModal: React.FC = () => {
                   <div className="flex-1 space-y-2.5 text-center sm:text-left">
                     <div className="font-serif text-lg font-bold text-[#121110]">
                       HAIROLOGY • Official UPI
-                    </div>
-
-                    <div className="p-2.5 bg-[#FAF7F2] rounded-xl border border-[#E8DFD1] flex items-center justify-between gap-2">
-                      <div className="text-left min-w-0">
-                        <div className="text-[9px] uppercase font-bold text-[#8A7463]">Connected UPI ID</div>
-                        <div className="font-mono text-xs font-bold text-[#121110] truncate">
-                          {USER_UPI_ID}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleCopyUpiId}
-                        className="px-2.5 py-1.5 bg-[#121110] hover:bg-[#2A2724] text-[#C5A880] rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer shrink-0"
-                      >
-                        <Copy className="w-3 h-3" />
-                        <span>{copiedUpiId ? 'Copied!' : 'Copy'}</span>
-                      </button>
                     </div>
 
                     <p className="text-[11px] text-[#4B5563] leading-relaxed">

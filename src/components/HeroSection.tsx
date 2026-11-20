@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowRight, Sparkles, ChevronLeft, ChevronRight, ChevronDown, ShieldCheck, Flame } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCart } from '../context/CartContext';
-import { PRODUCT_IMAGE_DUO, PRODUCT_IMAGE_HOT_WATER_STANDALONE } from '../data/products';
+import { PRODUCT_IMAGE_TRIO_PORTRAIT, PRODUCT_IMAGE_HOT_WATER_STANDALONE } from '../data/products';
 
 export const HeroSection: React.FC = () => {
   const { addItem } = useCart();
@@ -39,24 +39,24 @@ export const HeroSection: React.FC = () => {
       ),
       description:
         'Discover a new generation of haircare with innovative shampoo experiences. Formulated specifically to neutralize hard-water heavy metals and reconstruct keratin cuticles against Indian humidity.',
-      primaryCtaText: 'CLAIM THE DUO OFFER — ₹849',
-      primaryAction: () => addItem('the-duo', 'duo-full', 1),
-      secondaryCtaText: 'EXPLORE 3 PRODUCTS',
+      primaryCtaText: 'CLAIM THE TRIO OFFER — ₹1299',
+      primaryAction: () => addItem('the-trio', 'trio-full', 1),
+      secondaryCtaText: 'EXPLORE 7 PRODUCTS',
       secondaryAction: scrollToProducts,
       highlights: [
         { text: 'Steam-Activated Chelation', dotColor: 'bg-[#C5A880]' },
         { text: '72h Anti-Frizz Pea Peptides', dotColor: 'bg-[#C5A880]' },
-        { text: 'Complete 2-Step Indian Regimen', dotColor: 'bg-[#15803D]' },
+        { text: 'Complete 3-Step Indian Regimen', dotColor: 'bg-[#15803D]' },
       ],
-      image: PRODUCT_IMAGE_DUO,
-      imageAlt: 'The Hairology Duo - Hot Water Shampoo and Protein Shampoo',
-      badgeText: 'THE COMPLETE SYSTEM • 2 x 250 ML',
+      image: PRODUCT_IMAGE_TRIO_PORTRAIT,
+      imageAlt: 'The Hairology Trio - Hot Water Shampoo, Protein Shampoo and Rosemary Conditioner',
+      badgeText: 'THE COMPLETE SYSTEM • 3 x 250 ML',
       badgeIcon: <Sparkles className="w-3.5 h-3.5 fill-[#C5A880] text-[#C5A880]" />,
-      floatingCardTitle: 'The Hairology Duo',
-      floatingCardSubtitle: 'Day 1 Clarify ✦ Day 4 Reconstruct',
-      floatingCardPrice: '₹849',
-      floatingCardDiscount: '15% OFF • TAP TO VIEW',
-      onCardClick: () => openProductDetail('the-duo'),
+      floatingCardTitle: 'The Hairology Trio',
+      floatingCardSubtitle: 'Hot Water + Protein + Rosemary',
+      floatingCardPrice: '₹1299',
+      floatingCardDiscount: '19% OFF • TAP TO VIEW',
+      onCardClick: () => openProductDetail('the-trio'),
       accentColor: '#E11D48',
     },
     {
@@ -180,7 +180,7 @@ export const HeroSection: React.FC = () => {
               </div>
 
               {/* Main Headline */}
-              <h1 className="font-['Cormorant_Garamond',Georgia,serif] text-[2.75rem] sm:text-[3.5rem] lg:text-[4.25rem] xl:text-[5.25rem] font-semibold text-[#121110] leading-[0.98] tracking-[-0.02em]">
+              <h1 className="font-['Cormorant_Garamond',Georgia,serif] text-[3.15rem] sm:text-[4rem] lg:text-[4.85rem] xl:text-[5.85rem] font-semibold text-[#121110] leading-[0.98] tracking-[-0.02em]">
                 {currentSlide.headline}
               </h1>
 
@@ -307,7 +307,7 @@ export const HeroSection: React.FC = () => {
                 >
                   <span className="font-mono text-[10px] opacity-70">0{idx + 1}</span>
                   <span className="uppercase tracking-wider">
-                    {idx === 0 ? 'The Hairology Duo' : 'Hot Water Shampoo'}
+                    {idx === 0 ? 'The Hairology Trio' : 'Hot Water Shampoo'}
                   </span>
                   
                   {/* Active 10-Second Countdown Animation Bar inside Active Pill */}

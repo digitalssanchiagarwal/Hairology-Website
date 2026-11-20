@@ -107,20 +107,20 @@ export const Header: React.FC = () => {
             <button
               onClick={() => {
                 scrollToSection('products-showcase');
-                window.dispatchEvent(new CustomEvent('open-product-detail', { detail: { productId: 'hot-water-shampoo' } }));
+                window.dispatchEvent(new CustomEvent('open-product-detail', { detail: { productId: 'hot-water-rosemary-duo' } }));
               }}
-              className="text-xs lg:text-[13px] font-semibold tracking-[0.22em] text-[#E8DFD1] hover:text-[#C5A880] transition-colors uppercase cursor-pointer"
+              className="text-xs lg:text-[13px] font-semibold tracking-[0.18em] text-[#E8DFD1] hover:text-[#C5A880] transition-colors uppercase cursor-pointer whitespace-nowrap"
             >
-              HOT WATER
+              HOT WATER + ROSEMARY
             </button>
             <button
               onClick={() => {
                 scrollToSection('products-showcase');
-                window.dispatchEvent(new CustomEvent('open-product-detail', { detail: { productId: 'protein-shampoo' } }));
+                window.dispatchEvent(new CustomEvent('open-product-detail', { detail: { productId: 'protein-rosemary-duo' } }));
               }}
-              className="text-xs lg:text-[13px] font-semibold tracking-[0.22em] text-[#E8DFD1] hover:text-[#C5A880] transition-colors uppercase cursor-pointer"
+              className="text-xs lg:text-[13px] font-semibold tracking-[0.18em] text-[#E8DFD1] hover:text-[#C5A880] transition-colors uppercase cursor-pointer whitespace-nowrap"
             >
-              PROTEIN
+              PROTEIN + ROSEMARY
             </button>
             <button
               onClick={() => scrollToSection('reviews-section')}
@@ -218,11 +218,44 @@ export const Header: React.FC = () => {
                   onClick={() => {
                     setSearchOpen(false);
                     scrollToSection('products-showcase');
+                    window.dispatchEvent(new CustomEvent('open-product-detail', { detail: { productId: 'the-trio' } }));
+                  }}
+                  className="font-medium underline hover:text-[#C5A880]"
+                >
+                  The Hairology Trio (₹1299)
+                </button>
+                <span>·</span>
+                <button
+                  onClick={() => {
+                    setSearchOpen(false);
+                    scrollToSection('products-showcase');
                     window.dispatchEvent(new CustomEvent('open-product-detail', { detail: { productId: 'the-duo' } }));
                   }}
                   className="font-medium underline hover:text-[#C5A880]"
                 >
                   The Hairology Duo (₹849)
+                </button>
+                <span>·</span>
+                <button
+                  onClick={() => {
+                    setSearchOpen(false);
+                    scrollToSection('products-showcase');
+                    window.dispatchEvent(new CustomEvent('open-product-detail', { detail: { productId: 'hot-water-rosemary-duo' } }));
+                  }}
+                  className="font-medium underline hover:text-[#C5A880]"
+                >
+                  Hot Water + Rosemary (₹949)
+                </button>
+                <span>·</span>
+                <button
+                  onClick={() => {
+                    setSearchOpen(false);
+                    scrollToSection('products-showcase');
+                    window.dispatchEvent(new CustomEvent('open-product-detail', { detail: { productId: 'protein-rosemary-duo' } }));
+                  }}
+                  className="font-medium underline hover:text-[#C5A880]"
+                >
+                  Protein + Rosemary (₹949)
                 </button>
                 <span>·</span>
                 <button
@@ -245,6 +278,17 @@ export const Header: React.FC = () => {
                   className="font-medium underline hover:text-[#C5A880]"
                 >
                   Protein Reconstruct Shampoo (₹449)
+                </button>
+                <span>·</span>
+                <button
+                  onClick={() => {
+                    setSearchOpen(false);
+                    scrollToSection('products-showcase');
+                    window.dispatchEvent(new CustomEvent('open-product-detail', { detail: { productId: 'rosemary-conditioner' } }));
+                  }}
+                  className="font-medium underline hover:text-[#C5A880]"
+                >
+                  ROSEMARY CONDITIONER (₹549)
                 </button>
                       </div>
                   )}

@@ -22,18 +22,35 @@ import {
   PRODUCT_IMAGE_HOT_WATER_BACK,
   PRODUCT_IMAGE_PROTEIN, 
   PRODUCT_IMAGE_PROTEIN_BACK,
-  PRODUCT_IMAGE_DUO 
+  PRODUCT_IMAGE_CONDITIONER,
+  PRODUCT_IMAGE_CONDITIONER_BACK,
+  PRODUCT_IMAGE_DUO,
+  PRODUCT_IMAGE_HOT_WATER_ROSEMARY,
+  PRODUCT_IMAGE_PROTEIN_ROSEMARY,
+  PRODUCT_IMAGE_TRIO,
+  PRODUCT_IMAGE_TRIO_HOT_WATER_BACK,
+  PRODUCT_IMAGE_TRIO_PROTEIN_BACK
 } from '../data/products';
 
 export const ProductDetailModule: React.FC = () => {
   const { addItem, updateQuantity, items, openCart } = useCart();
 
-  // Strictly the 3 Core Launch Products
+  const trioProduct = PRODUCTS.find(p => p.id === 'the-trio');
+
+  // Grid Products below the top Trio flagship card (Hot Water+Rosemary at 3rd, Protein+Rosemary at 4th)
   const coreThreeProducts = PRODUCTS.filter(p => 
-    p.id === 'the-duo' || p.id === 'hot-water-shampoo' || p.id === 'protein-shampoo'
+    p.id === 'the-duo' ||
+    p.id === 'hot-water-rosemary-duo' ||
+    p.id === 'protein-rosemary-duo' ||
+    p.id === 'hot-water-shampoo' ||
+    p.id === 'protein-shampoo' ||
+    p.id === 'rosemary-conditioner'
   );
 
-  // Active product in view: null shows the 3-cards showcase; string ID shows the full-screen detailed view
+  // All 7 launch products for detail view & product switcher
+  const allLaunchProducts = trioProduct ? [trioProduct, ...coreThreeProducts] : coreThreeProducts;
+
+  // Active product in view: null shows the product showcase grid; string ID shows the full-screen detailed view
   const [activeDetailProductId, setActiveDetailProductId] = useState<string | null>(null);
 
   // Current active slide index for gallery
@@ -41,9 +58,13 @@ export const ProductDetailModule: React.FC = () => {
 
   // Selected variant for each product
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({
+    'the-trio': 'trio-full',
     'the-duo': 'duo-full',
+    'hot-water-rosemary-duo': 'hw-rc-full',
+    'protein-rosemary-duo': 'pr-rc-full',
     'hot-water-shampoo': 'hot-full',
-    'protein-shampoo': 'protein-full'
+    'protein-shampoo': 'protein-full',
+    'rosemary-conditioner': 'rosemary-full'
   });
 
   // Quantity stepper inside the opened detail view
@@ -82,10 +103,14 @@ export const ProductDetailModule: React.FC = () => {
     return () => window.removeEventListener('open-product-detail', handleOpenDetail);
   }, []);
 
-  const detailProduct = coreThreeProducts.find(p => p.id === activeDetailProductId);
+  const detailProduct = allLaunchProducts.find(p => p.id === activeDetailProductId);
   const detailVariantId = detailProduct ? (selectedVariants[detailProduct.id] || detailProduct.variants[0].id) : '';
   const detailVariant = detailProduct?.variants.find(v => v.id === detailVariantId) || detailProduct?.variants[0];
-  const detailDiscount = detailVariant ? Math.round(((detailVariant.mrp - detailVariant.price) / detailVariant.mrp) * 100) : 0;
+  const detailDiscount = detailVariant
+    ? detailProduct?.id === 'hot-water-rosemary-duo' || detailProduct?.id === 'protein-rosemary-duo'
+      ? 13
+      : Math.round(((detailVariant.mrp - detailVariant.price) / detailVariant.mrp) * 100)
+    : 0;
 
   // Multi-slide gallery featuring the authentic user-uploaded photographs
   const productGalleries: Record<string, Array<{
@@ -152,6 +177,86 @@ export const ProductDetailModule: React.FC = () => {
         src: PRODUCT_IMAGE_PROTEIN_BACK,
         label: 'Protein Shampoo Back',
         caption: 'Step 2: Protein Shampoo back bottle & directions'
+      }
+    ],
+    'rosemary-conditioner': [
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_CONDITIONER,
+        label: 'Front Studio Shot',
+        caption: 'Rosemary Conditioner • Paraben Free, Sulphate Free & Gluten Free (250 ml)'
+      },
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_CONDITIONER_BACK,
+        label: 'Back Bottle & Directions',
+        caption: 'Directions of use, caution & complete ingredients list • 250 ml bottle'
+      }
+    ],
+    'the-trio': [
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_TRIO,
+        label: 'The Hairology Trio Set',
+        caption: 'Hot Water Shampoo + Protein Shampoo + Rosemary Conditioner • 250 ml each'
+      },
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_TRIO_HOT_WATER_BACK,
+        label: 'Hot Water Shampoo Back',
+        caption: 'Step 1: Hot Water Shampoo — Directions & Ingredients (250 ml)'
+      },
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_TRIO_PROTEIN_BACK,
+        label: 'Protein Shampoo Back',
+        caption: 'Step 2: Protein Shampoo — Directions & Ingredients (250 ml)'
+      },
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_CONDITIONER_BACK,
+        label: 'Rosemary Conditioner Back',
+        caption: 'Step 3: Rosemary Conditioner — Directions & Ingredients (250 ml)'
+      }
+    ],
+    'hot-water-rosemary-duo': [
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_HOT_WATER_ROSEMARY,
+        label: 'Hot Water Shampoo + Rosemary Conditioner',
+        caption: 'Rosemary Conditioner (250 ml) & Hot Water Shampoo (250 ml) Combo'
+      },
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_CONDITIONER_BACK,
+        label: 'Rosemary Conditioner Back',
+        caption: 'Rosemary Conditioner — Directions of Use, Caution & Ingredients (250 ml)'
+      },
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_TRIO_HOT_WATER_BACK,
+        label: 'Hot Water Shampoo Back',
+        caption: 'Hot Water Shampoo — Directions of Use, Caution & Ingredients (250 ml)'
+      }
+    ],
+    'protein-rosemary-duo': [
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_PROTEIN_ROSEMARY,
+        label: 'Protein + Rosemary Conditioner',
+        caption: 'Rosemary Conditioner (250 ml) & Protein Shampoo (250 ml) Combo'
+      },
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_CONDITIONER_BACK,
+        label: 'Rosemary Conditioner Back',
+        caption: 'Rosemary Conditioner — Directions of Use, Caution & Ingredients (250 ml)'
+      },
+      {
+        type: 'image',
+        src: PRODUCT_IMAGE_TRIO_PROTEIN_BACK,
+        label: 'Protein Shampoo Back',
+        caption: 'Protein Shampoo — Directions of Use, Caution & Ingredients (250 ml)'
       }
     ]
   };
@@ -279,6 +384,122 @@ export const ProductDetailModule: React.FC = () => {
           a: 'Each 250 ml bottle provides approximately 35–45 washes, offering over 3 months of complete cyclical scalp and hair therapy.'
         }
       ]
+    },
+    'rosemary-conditioner': {
+      categoryPills: 'PARABEN FREE • SULPHATE FREE • GLUTEN FREE • FOR ALL HAIR TYPES',
+      subtitleItalic: 'Reduces hair fall & breakage — frizz control & smoothens hair',
+      dropBadge: 'NEW LAUNCH',
+      ingredients: [
+        'Rosmarinus Officinalis (Rosemary) Oil',
+        'Paraben Free, Sulphate Free & Gluten Free',
+        'Avocado Oil & Coconut Oil',
+        'Aloe Barbadensis (Aloe Vera)',
+        'Tocopheryl Acetate (Vitamin E)'
+      ],
+      description: 'Paraben free, sulphate free, and gluten free. Enriched with Rosemary Leaf Oil, Coconut Oil, Aloe Vera, Avocado Oil, and Vitamin E to reduce hair fall and breakage while controlling frizz and smoothening all hair types.',
+      faqs: [
+        {
+          q: 'Q1. What are the key benefits of HAIROLOGY ROSEMARY CONDITIONER?',
+          a: 'It reduces hair fall and breakage, calms frizz, and deeply smoothens strands using Rosemary Leaf Oil, Coconut Oil, Aloe Vera, and Avocado Oil—for all hair types.'
+        },
+        {
+          q: 'Q2. How do I use ROSEMARY CONDITIONER after shampooing?',
+          a: 'After shampooing, apply conditioner to wet hair and massage gently from roots to ends. Leave on for 5–10 minutes, then rinse thoroughly.'
+        },
+        {
+          q: 'Q3. Is it paraben free, sulphate free, and gluten free?',
+          a: 'Yes! ROSEMARY CONDITIONER is 100% paraben free, sulphate free, and gluten free.'
+        },
+        {
+          q: 'Q4. Can I pair it with Hot Water Shampoo or Protein Shampoo?',
+          a: 'Yes. Use it immediately after your Hot Water or Protein wash step to lock in moisture, seal cuticles, and maintain silky smooth, frizz-free hair.'
+        },
+        {
+          q: 'Q5. Are there any precautions or storage instructions?',
+          a: 'For external use only. Do not use on inflamed skin, and discontinue use if irritation occurs. Store in a cool and dry place out of reach of children.'
+        }
+      ]
+    },
+    'the-trio': {
+      categoryPills: 'COMPLETE 3-STEP SYSTEM • 250 ML EACH • SAVE 19%',
+      subtitleItalic: 'Hot Water Shampoo + Protein Shampoo + Rosemary Conditioner',
+      dropBadge: 'COMPLETE TRIO',
+      ingredients: [
+        'Hot Water Shampoo (Ectoin + Salicylic)',
+        'Protein Shampoo (Hydrolyzed Keratin & Biotin)',
+        'Rosemary Conditioner (Rosemary, Avocado & Coconut)',
+        'Paraben Free & Sulphate Free',
+        'Complete Hard-Water Regimen'
+      ],
+      description: 'The complete 3-bottle Hairology ritual in full 250 ml sizes: clarify hard-water buildup with Hot Water Shampoo, rebuild strand strength with Protein Shampoo, and control frizz & hair fall with Rosemary Conditioner.',
+      faqs: [
+        {
+          q: 'Q1. What comes inside The Hairology Trio?',
+          a: 'Three full-size 250 ml bottles: Hot Water Shampoo (250 ml), Protein Shampoo (250 ml), and Rosemary Conditioner (250 ml).'
+        },
+        {
+          q: 'Q2. How do I use all 3 products together?',
+          a: 'Wash with Hot Water Shampoo on Day 1 and Protein Shampoo on Day 4, following every wash with Rosemary Conditioner (left on for 5–10 minutes) for soft, frizz-free hair.'
+        },
+        {
+          q: 'Q3. Are all three products free from harsh sulphates and parabens?',
+          a: 'Yes, all three formulations are crafted without parabens or harsh sulphates and are gentle on all Indian hair types.'
+        }
+      ]
+    },
+    'hot-water-rosemary-duo': {
+      categoryPills: 'HEAT SHIELD + FRIZZ CONTROL • 250 ML EACH • SAVE 13%',
+      subtitleItalic: 'Hot Water Shampoo + Rosemary Conditioner',
+      dropBadge: 'WASH & CONDITION DUO',
+      ingredients: [
+        'Enriched with Ectoin (Thermal Shield)',
+        'Rosmarinus Officinalis (Rosemary) Leaf Oil',
+        'Paraben Free & Sulphate Free',
+        'Gluten Free & Colour Safe',
+        'Niacinamide, Avocado & Coconut Oils'
+      ],
+      description: 'Cleanse hard-water mineral buildup with Ectoin-enriched Hot Water Shampoo (250 ml), then calm frizz and reduce hair fall & breakage with Rosemary Conditioner (250 ml). Paraben free, sulphate free, and gluten free.',
+      faqs: [
+        {
+          q: 'Q1. What bottles are included in Hot Water Shampoo + Rosemary Conditioner?',
+          a: 'You receive two full-size 250 ml bottles: Hot Water Shampoo (250 ml) and Rosemary Conditioner (250 ml).'
+        },
+        {
+          q: 'Q2. How do I use this wash and condition routine?',
+          a: 'Wash hair with Hot Water Shampoo on damp scalp and rinse thoroughly, then massage Rosemary Conditioner from roots to ends, leave on for 5–10 minutes, and rinse.'
+        },
+        {
+          q: 'Q3. Are both formulas free from parabens, sulphates, and gluten?',
+          a: 'Yes! Both Hot Water Shampoo and Rosemary Conditioner are 100% paraben free, sulphate free, and gluten free.'
+        }
+      ]
+    },
+    'protein-rosemary-duo': {
+      categoryPills: 'STRENGTH + FRIZZ CONTROL • 250 ML EACH • SAVE 13%',
+      subtitleItalic: 'Protein + Rosemary conditioner',
+      dropBadge: 'STRENGTH & SMOOTH',
+      ingredients: [
+        'Hydrolyzed Keratin & Wheat Protein',
+        'Rosmarinus Officinalis (Rosemary) Leaf Oil',
+        'Biotin & Pro-Vitamin B5 (Panthenol)',
+        'No Parabens, SLES or SLS',
+        'Avocado, Coconut & Aloe Vera Oils'
+      ],
+      description: 'Rebuild cortical strand strength with Protein Shampoo (250 ml), then follow with Rosemary Conditioner (250 ml) to reduce hair fall & breakage and smooth frizz for all hair types.',
+      faqs: [
+        {
+          q: 'Q1. What bottles are included in Protein + Rosemary conditioner?',
+          a: 'You receive two full-size 250 ml bottles: Protein Shampoo (250 ml) and Rosemary Conditioner (250 ml).'
+        },
+        {
+          q: 'Q2. How do I use Protein Shampoo with Rosemary Conditioner?',
+          a: 'Lather Protein Shampoo gently into damp scalp and rinse with cool water, then apply Rosemary Conditioner from roots to ends, leave on for 5–10 minutes, and rinse thoroughly.'
+        },
+        {
+          q: 'Q3. Are both formulas paraben free and sulphate free?',
+          a: 'Yes! Both Protein Shampoo and Rosemary Conditioner are free from parabens, SLS, and SLES.'
+        }
+      ]
     }
   };
 
@@ -293,7 +514,7 @@ export const ProductDetailModule: React.FC = () => {
             <div className="text-center max-w-3xl mx-auto mb-14 sm:mb-20">
               <div className="inline-flex items-center gap-2 mb-3 text-xs font-semibold tracking-[0.25em] text-[#C5A880] uppercase bg-[#121110] px-4 py-1.5 rounded-full shadow-sm">
                 <Sparkles className="w-3.5 h-3.5 text-[#C5A880]" />
-                <span>PHASE 1 LAUNCH PORTFOLIO • THREE SCIENTIFIC FORMULATIONS</span>
+                <span>PHASE 1 LAUNCH PORTFOLIO • COMPLETE TRIO & FORMULATIONS</span>
               </div>
               <h2 className="font-serif text-3xl sm:text-5xl lg:text-6xl font-bold text-[#121110] tracking-tight">
                 DISCOVER <span className="italic font-normal text-[#C5A880]">OUR PRODUCTS</span>
@@ -303,13 +524,134 @@ export const ProductDetailModule: React.FC = () => {
               </p>
             </div>
 
-            {/* 3 Large Luxury Product Boxes Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-10 items-stretch">
+            {/* TOP FLAGSHIP PRODUCT CARD: THE HAIROLOGY TRIO */}
+            {trioProduct && (() => {
+              const trioVariantId = selectedVariants[trioProduct.id] || trioProduct.variants[0].id;
+              const trioVariant = trioProduct.variants.find(v => v.id === trioVariantId) || trioProduct.variants[0];
+              const trioCartItem = items.find(it => it.productId === trioProduct.id && it.variantId === trioVariant.id);
+              const trioDiscount = Math.round(((trioVariant.mrp - trioVariant.price) / trioVariant.mrp) * 100);
+
+              return (
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, y: 25 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.45 }}
+                  onClick={() => openProductDetails(trioProduct.id)}
+                  className="mb-8 lg:mb-10 bg-white rounded-3xl shadow-[0_18px_50px_-12px_rgba(18,17,16,0.08)] hover:shadow-[0_25px_65px_-12px_rgba(197,168,128,0.3)] p-6 sm:p-8 lg:p-10 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center transition-all duration-500 hover:-translate-y-1.5 group cursor-pointer border border-[#C5A880]/40 hover:border-[#C5A880]"
+                >
+                  {/* Left: Full Trio Studio Image */}
+                  <div className="lg:col-span-6 relative aspect-[4/3] rounded-2xl overflow-hidden bg-gradient-to-b from-[#FAF7F2] to-[#F3EDE2] shadow-inner">
+                    <img
+                      src={trioProduct.image}
+                      alt={trioProduct.name}
+                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none" />
+
+                    <div className="absolute top-3.5 right-3.5 bg-[#121110]/90 backdrop-blur-md text-[#C5A880] text-[10px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-full border border-[#C5A880]/40 shadow-md">
+                      ★ COMPLETE TRIO • 3 BOTTLES
+                    </div>
+
+                    <div className="absolute bottom-3.5 left-3.5 right-3.5 backdrop-blur-md bg-white/90 group-hover:bg-[#121110] p-2.5 rounded-xl transition-all flex items-center justify-between text-xs shadow-md">
+                      <span className="font-semibold text-[11px] text-[#121110] group-hover:text-[#C5A880] transition-colors flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-[#C5A880]" />
+                        <span>Click to view whole screen & 4 slides</span>
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-[#121110] group-hover:text-[#C5A880] group-hover:translate-x-0.5 transition-all" />
+                    </div>
+                  </div>
+
+                  {/* Right: Trio Details & Add to Bag */}
+                  <div className="lg:col-span-6 flex flex-col justify-between space-y-5">
+                    <div>
+                      <div className="text-[11px] font-bold tracking-[0.22em] text-[#8A7463] uppercase mb-2">
+                        COMPLETE 3-STEP SYSTEM • SAVE {trioDiscount}%
+                      </div>
+
+                      <div className="flex items-start justify-between gap-3 mb-2.5">
+                        <h3 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold text-[#121110] group-hover:text-[#C5A880] transition-colors leading-tight">
+                          The Hairology Trio
+                        </h3>
+                        <span className="inline-flex items-center px-3 py-1 bg-[#F9F7F2] border border-[#E5E0D8] rounded-lg text-xs font-semibold text-[#8A7463] shrink-0 select-none">
+                          {trioVariant.size}
+                        </span>
+                      </div>
+
+                      <p className="text-sm sm:text-base text-[#4A4540] leading-relaxed mb-4">
+                        Hot Water Shampoo + Protein Shampoo + Rosemary Conditioner (250 ml each). Cleanse hard-water buildup, repair keratin bonds, and tame frizz &amp; hair fall in one complete ritual.
+                      </p>
+
+                      <div className="flex items-center gap-2 text-xs mb-4">
+                        <Star className="w-4 h-4 fill-[#121110] text-[#121110]" />
+                        <span className="font-bold text-[#121110]">{trioProduct.rating}</span>
+                        <span className="text-[#8A7463]">({trioProduct.reviewsCount} verified reviews)</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-[#F3EDE2] space-y-4" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-baseline justify-between">
+                        <div className="flex items-baseline gap-2.5">
+                          <span className="text-3xl sm:text-4xl font-serif font-bold text-[#121110]">
+                            ₹{trioVariant.price}
+                          </span>
+                          <span className="text-base line-through text-[#9CA3AF]">
+                            ₹{trioVariant.mrp}
+                          </span>
+                        </div>
+                        <span className="text-xs font-bold text-[#15803D] bg-[#DCFCE7] px-3 py-1 rounded-full">
+                          {trioDiscount}% OFF
+                        </span>
+                      </div>
+
+                      {trioCartItem && trioCartItem.quantity > 0 ? (
+                        <div className="w-full bg-[#121110] text-[#C5A880] border border-[#C5A880]/50 font-extrabold rounded-xl py-3.5 px-5 flex items-center justify-between shadow select-none">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(trioProduct.id, trioVariant.id, trioCartItem.quantity - 1)}
+                            className="p-1 hover:scale-125 transition-transform cursor-pointer text-[#C5A880]"
+                            aria-label="Decrease quantity"
+                          >
+                            <Minus className="w-4 h-4 stroke-[3]" />
+                          </button>
+                          <span className="text-sm font-bold font-sans">
+                            {trioCartItem.quantity} in Bag
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(trioProduct.id, trioVariant.id, trioCartItem.quantity + 1)}
+                            className="p-1 hover:scale-125 transition-transform cursor-pointer text-[#C5A880]"
+                            aria-label="Increase quantity"
+                          >
+                            <Plus className="w-4 h-4 stroke-[3]" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => addItem(trioProduct.id, trioVariant.id, 1)}
+                          className="w-full bg-gradient-to-r from-[#D4AF37] via-[#C5A880] to-[#B38F5B] hover:brightness-105 active:scale-[0.98] text-[#121110] font-extrabold text-xs sm:text-sm tracking-wider uppercase py-4 px-6 rounded-xl transition-all shadow-md hover:shadow-xl cursor-pointer text-center border border-[#D4AF37]/40"
+                        >
+                          ADD TRIO TO BAG — ₹{trioVariant.price}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })()}
+
+            {/* Luxury Product Boxes Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 items-stretch">
               {coreThreeProducts.map((p) => {
                 const currentVariantId = selectedVariants[p.id] || p.variants[0].id;
                 const currentVariant = p.variants.find(v => v.id === currentVariantId) || p.variants[0];
                 const cartItem = items.find(it => it.productId === p.id && it.variantId === currentVariant.id);
                 const productImage = p.image;
+                const cardDiscount =
+                  p.id === 'hot-water-rosemary-duo' || p.id === 'protein-rosemary-duo'
+                    ? 13
+                    : Math.round(((currentVariant.mrp - currentVariant.price) / currentVariant.mrp) * 100);
 
                 return (
                   <motion.div
@@ -335,7 +677,17 @@ export const ProductDetailModule: React.FC = () => {
 
                         {/* Top-Right Badge */}
                         <div className="absolute top-3.5 right-3.5 bg-[#121110]/85 backdrop-blur-md text-[#C5A880] text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full border border-[#C5A880]/30 shadow-md">
-                          {p.id === 'the-duo' ? '★ BESTSELLER' : p.id === 'hot-water-shampoo' ? '⚡ CHELATION' : '✦ BOND REPAIR'}
+                          {p.id === 'the-duo'
+                            ? '★ BESTSELLER'
+                            : p.id === 'hot-water-rosemary-duo'
+                            ? '✦ WASH & CONDITION'
+                            : p.id === 'protein-rosemary-duo'
+                            ? '✦ STRENGTH & SMOOTH'
+                            : p.id === 'hot-water-shampoo'
+                            ? '⚡ CHELATION'
+                            : p.id === 'rosemary-conditioner'
+                            ? '🌿 NEW LAUNCH'
+                            : '✦ BOND REPAIR'}
                         </div>
 
                         {/* Interactive Click Prompt Pill */}
@@ -348,13 +700,19 @@ export const ProductDetailModule: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* 2. Title Row with Volume Dropdown Pill */}
+                      {/* 2. Title Row with Volume Badge */}
                       <div className="flex items-start justify-between gap-3 mb-2.5">
-                        <h3 className="font-serif text-2xl font-bold text-[#121110] group-hover:text-[#C5A880] transition-colors leading-tight">
-                          {p.id === 'the-duo' 
-                            ? 'The Hairology Duo' 
-                            : p.id === 'hot-water-shampoo' 
-                            ? 'Hot Water Shampoo' 
+                        <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#121110] group-hover:text-[#C5A880] transition-colors leading-tight">
+                          {p.id === 'the-duo'
+                            ? 'The Hairology Duo'
+                            : p.id === 'hot-water-rosemary-duo'
+                            ? 'Hot Water Shampoo + Rosemary Conditioner'
+                            : p.id === 'protein-rosemary-duo'
+                            ? 'Protein + Rosemary conditioner'
+                            : p.id === 'hot-water-shampoo'
+                            ? 'Hot Water Shampoo'
+                            : p.id === 'rosemary-conditioner'
+                            ? 'ROSEMARY CONDITIONER'
                             : 'Protein Shampoo'}
                         </h3>
 
@@ -368,7 +726,10 @@ export const ProductDetailModule: React.FC = () => {
                       <p className="text-xs sm:text-sm text-[#6B7280] leading-relaxed mb-3 line-clamp-2">
                         {p.id === 'hot-water-shampoo' && 'Paraben free, sulphate free, gluten free, enriched with ectoin. Steam-activated chelation for hard-water hair.'}
                         {p.id === 'protein-shampoo' && 'Paraben free, sulphate free. Cortical bond repair with hydrolyzed pea & silk peptides.'}
+                        {p.id === 'rosemary-conditioner' && 'Paraben free, sulphate free, gluten free. Reduces hair fall & breakage with frizz control.'}
                         {p.id === 'the-duo' && 'The complete wash-day protocol: Clarify on Day 1, Reconstruct on Day 4 for hard-water hair.'}
+                        {p.id === 'hot-water-rosemary-duo' && 'Warm-water Ectoin chelation shampoo paired with paraben & sulphate-free Rosemary Conditioner (250 ml each).'}
+                        {p.id === 'protein-rosemary-duo' && 'Strengthening Protein Shampoo paired with paraben & sulphate-free Rosemary Conditioner (250 ml each).'}
                       </p>
 
                       {/* 4. Rating Row */}
@@ -391,7 +752,7 @@ export const ProductDetailModule: React.FC = () => {
                           </span>
                         </div>
                         <span className="text-[11px] font-bold text-[#15803D] bg-[#DCFCE7] px-2.5 py-0.5 rounded-full">
-                          {Math.round(((currentVariant.mrp - currentVariant.price) / currentVariant.mrp) * 100)}% OFF
+                          {cardDiscount}% OFF
                         </span>
                       </div>
 
@@ -455,19 +816,31 @@ export const ProductDetailModule: React.FC = () => {
                     <span>Back to all products</span>
                   </button>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-[#8A7463] font-medium hidden sm:inline">Switch product:</span>
-                    {coreThreeProducts.map((cp) => (
+                    {allLaunchProducts.map((cp) => (
                       <button
                         key={cp.id}
                         onClick={() => openProductDetails(cp.id)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                           detailProduct.id === cp.id
                             ? 'bg-[#121110] text-[#C5A880] shadow-md'
                             : 'bg-[#F3EDE2] text-[#3D3A37] hover:bg-[#E8DFD1]'
                         }`}
                       >
-                        {cp.id === 'hot-water-shampoo' ? 'Hot Water' : cp.id === 'protein-shampoo' ? 'Protein' : 'The Duo'}
+                        {cp.id === 'the-trio'
+                          ? 'The Trio'
+                          : cp.id === 'hot-water-rosemary-duo'
+                          ? 'Hot Water + Rosemary'
+                          : cp.id === 'protein-rosemary-duo'
+                          ? 'Protein + Rosemary'
+                          : cp.id === 'hot-water-shampoo'
+                          ? 'Hot Water'
+                          : cp.id === 'protein-shampoo'
+                          ? 'Protein'
+                          : cp.id === 'rosemary-conditioner'
+                          ? 'Rosemary Conditioner'
+                          : 'The Duo'}
                       </button>
                     ))}
                   </div>
@@ -525,8 +898,16 @@ export const ProductDetailModule: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Thumbnail Strip for Slides - 3 Authentic Photo Thumbnails */}
-                    <div className="grid grid-cols-3 gap-3">
+                    {/* Thumbnail Strip for Slides */}
+                    <div
+                      className={`grid gap-3 ${
+                        currentGallery.length === 2
+                          ? 'grid-cols-2'
+                          : currentGallery.length === 4
+                          ? 'grid-cols-4'
+                          : 'grid-cols-3'
+                      }`}
+                    >
                       {currentGallery.map((slide, idx) => (
                         <button
                           key={idx}
