@@ -507,6 +507,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await signOutFounderGoogle();
         return { ok: false, error: msg };
       }
+      try {
+        const cloudList = await fetchAllOrdersAdminOnce();
+        setFirestoreOrders(cloudList);
+        setOrders(prev => mergeOrderLists(cloudList, prev));
+      } catch (fetchErr) {
+        console.warn('Immediate Firestore fetch notice:', fetchErr);
+      }
       return { ok: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unable to connect Google Cloud Sync.';

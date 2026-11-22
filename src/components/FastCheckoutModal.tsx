@@ -225,8 +225,8 @@ export const FastCheckoutModal: React.FC = () => {
     };
 
     const buildClientFallbackOrder = (): Order => ({
-      id: pendingOrder?.id || `HR-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      createdAt: pendingOrder?.createdAt || new Date().toISOString(),
+      id: `HR-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      createdAt: new Date().toISOString(),
       customerPhone: customerFormattedPhone,
       deliveryAddress: addressPayload,
       items: [...items],
@@ -239,8 +239,7 @@ export const FastCheckoutModal: React.FC = () => {
       paymentStatus: 'PENDING',
       orderStatus: 'PENDING_CONFIRMATION',
       payerUpi: USER_UPI_ID,
-      trackingNumber:
-        pendingOrder?.trackingNumber || `DELHIVERY-AWB-${Math.floor(100000000 + Math.random() * 900000000)}`,
+      trackingNumber: `DELHIVERY-AWB-${Math.floor(100000000 + Math.random() * 900000000)}`,
     });
 
     try {
@@ -257,8 +256,7 @@ export const FastCheckoutModal: React.FC = () => {
             subtotal,
             discount: 0,
             shipping: shippingFee,
-            total: grandTotal,
-            existingOrderId: pendingOrder?.id
+            total: grandTotal
           })
         });
         const contentType = res.headers.get('content-type') || '';

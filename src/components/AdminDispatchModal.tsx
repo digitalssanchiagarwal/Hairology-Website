@@ -26,8 +26,7 @@ import {
   BarChart3,
   Phone,
   User,
-  Trash2,
-  Plus
+  Trash2
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { ADMIN_PHONE, PRODUCTS, USER_UPI_ID } from '../data/products';
@@ -82,7 +81,6 @@ export const AdminDispatchModal: React.FC = () => {
     updateOrderStatus,
     founderVerifyUpiPayment,
     founderMarkPaymentFailed,
-    founderCreateManualOrder,
     founderResetAllOrders,
     firebaseAdminEmail,
     isFirebaseCloudConnected,
@@ -118,20 +116,6 @@ export const AdminDispatchModal: React.FC = () => {
   const [justVerifiedOrderId, setJustVerifiedOrderId] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResettingOrders, setIsResettingOrders] = useState(false);
-
-  // Manual / Direct UPI Order Entry State
-  const [showManualOrderForm, setShowManualOrderForm] = useState(false);
-  const [manualName, setManualName] = useState('');
-  const [manualPhone, setManualPhone] = useState('');
-  const [manualProductId, setManualProductId] = useState(PRODUCTS[0]?.id || 'the-trio');
-  const [manualQty, setManualQty] = useState(1);
-  const [manualTotal, setManualTotal] = useState(String(PRODUCTS[0]?.variants[0]?.price || 1299));
-  const [manualUtr, setManualUtr] = useState('');
-  const [manualAddress, setManualAddress] = useState('');
-  const [manualCity, setManualCity] = useState('');
-  const [manualPincode, setManualPincode] = useState('');
-  const [manualPaymentStatus, setManualPaymentStatus] = useState<'PAID' | 'PENDING'>('PAID');
-  const [isCreatingManualOrder, setIsCreatingManualOrder] = useState(false);
 
   // Fetch live server orders whenever authenticated panel opens, and auto-refresh every 3 seconds
   useEffect(() => {
@@ -453,63 +437,6 @@ export const AdminDispatchModal: React.FC = () => {
       setStatusFilter('ALL');
     }
     showToast(res.message || 'Founder Panel cleared.');
-  };
-
-  const handleCreateManualOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!savedCreds) return;
-    const prod = PRODUCTS.find(p => p.id === manualProductId) || PRODUCTS[0];
-    const variant = prod.variants[0];
-    const qty = Math.max(1, Math.round(manualQty || 1));
-    const parsedTotal = Math.round(Number(manualTotal) || 0);
-    if (parsedTotal <= 0) {
-      showToast('Please enter a valid payment amount greater than ₹0.');
-      return;
-    }
-
-    const itemUnitPrice = Math.max(1, Math.round(parsedTotal / qty));
-    setIsCreatingManualOrder(true);
-    const res = await founderCreateManualOrder(
-      {
-        recipientName: manualName,
-        phoneNumber: manualPhone,
-        streetAddress: manualAddress,
-        city: manualCity,
-        pincode: manualPincode,
-        items: [
-          {
-            productId: prod.id,
-            variantId: variant.id,
-            productName: prod.name,
-            variantLabel: variant.label,
-            price: itemUnitPrice,
-            mrp: variant.mrp,
-            quantity: qty,
-            image: prod.image,
-          },
-        ],
-        total: parsedTotal,
-        utrRef: manualUtr,
-        paymentStatus: manualPaymentStatus,
-      },
-      savedCreds
-    );
-    setIsCreatingManualOrder(false);
-    if (res.ok && res.order) {
-      setSelectedOrderId(res.order.id);
-      setShowManualOrderForm(false);
-      setManualName('');
-      setManualPhone('');
-      setManualUtr('');
-      setManualAddress('');
-      setManualCity('');
-      setManualPincode('');
-      setManualQty(1);
-      setManualTotal(String(prod.variants[0]?.price || 1299));
-      showToast(res.message || `Order #${res.order.id} recorded!`);
-    } else {
-      showToast(res.message || 'Could not save order.');
-    }
   };
 
   const getCleanPhone = (phoneStr: string) => {
@@ -989,17 +916,13 @@ export const AdminDispatchModal: React.FC = () => {
 
         {/* Firebase Cloud Sync Notice Banner (for multi-device live sync on Vercel / web) */}
         {!isFirebaseCloudConnected && (
-          <div className="bg-gradient-to-r from-[#2E2517] to-[#231D14] border-b border-[#C5A880]/50 px-4 sm:px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
-            <div className="text-[#FDFBF7] flex items-center gap-2.5 text-center sm:text-left">
+          <div className="bg-[#262018] border-b border-[#C5A880]/30 px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+            <div className="text-[#E8DFD1] flex items-center gap-2 text-center sm:text-left">
               <Database className="w-4 h-4 text-[#C5A880] shrink-0 hidden sm:block" />
               <span>
-                {firebaseSyncError ? (
-                  <span className="text-amber-300 font-medium">{firebaseSyncError}</span>
-                ) : (
-                  <>
-                    <strong className="text-[#C5A880]">Cloud Sync Disconnected:</strong> Sign in with Google (<strong>{savedCreds?.email || AUTHORIZED_FOUNDER_EMAILS[0]}</strong>) to receive customer orders &amp; UPI payments from other phones in real time.
-                  </>
-                )}
+                {firebaseSyncError
+                  ? firebaseSyncError
+                  : 'Connect Firebase Cloud Sync to view and confirm orders placed from customer phones in real time.'}
               </span>
             </div>
             <button
@@ -1012,9 +935,9 @@ export const AdminDispatchModal: React.FC = () => {
                   showToast(res.error, 6000);
                 }
               }}
-              className="px-3.5 py-2 bg-[#C5A880] hover:bg-[#d4b993] text-[#121110] font-bold rounded-lg text-[11px] uppercase tracking-wider shrink-0 cursor-pointer shadow"
+              className="px-3 py-1.5 bg-[#C5A880] hover:bg-[#d4b993] text-[#121110] font-bold rounded-lg text-[11px] uppercase tracking-wider shrink-0 cursor-pointer"
             >
-              Sign In &amp; Sync Cloud Orders
+              Connect Cloud Sync
             </button>
           </div>
         )}
@@ -1148,212 +1071,7 @@ export const AdminDispatchModal: React.FC = () => {
                   </button>
                 ))}
               </div>
-
-              <button
-                type="button"
-                onClick={() => setShowManualOrderForm(!showManualOrderForm)}
-                className="px-3 py-1.5 bg-[#C5A880] hover:bg-[#d4b993] text-[#121110] font-bold rounded-lg text-[11px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 shadow"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{showManualOrderForm ? 'Close Form' : 'Record Order / Payment'}</span>
-              </button>
             </div>
-
-            {/* RECORD MANUAL / DIRECT UPI ORDER FORM (SUPPORTS ORDERS > ₹2,000) */}
-            {showManualOrderForm && (
-              <form
-                onSubmit={handleCreateManualOrder}
-                className="p-4 sm:p-5 bg-[#23201D] rounded-2xl border border-[#C5A880]/50 space-y-3.5 text-xs"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-white/10">
-                  <div>
-                    <h4 className="font-serif text-base font-bold text-[#C5A880]">
-                      Record Direct UPI Payment / Custom Order (Any Amount, Including &gt; ₹2,000)
-                    </h4>
-                    <p className="text-[11px] text-[#8A7463]">
-                      Log a direct Google Pay / PhonePe transfer or WhatsApp order so it appears in Sales Analytics &amp; Cloud Sync immediately.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider text-[#8A7463] block mb-1">
-                      Customer Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={manualName}
-                      onChange={e => setManualName(e.target.value)}
-                      placeholder="Full Name"
-                      className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-white outline-none focus:border-[#C5A880]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider text-[#8A7463] block mb-1">
-                      Mobile Number *
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      value={manualPhone}
-                      onChange={e => setManualPhone(e.target.value)}
-                      placeholder="10-digit phone"
-                      className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg font-mono text-white outline-none focus:border-[#C5A880]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider text-[#8A7463] block mb-1">
-                      Product *
-                    </label>
-                    <select
-                      value={manualProductId}
-                      onChange={e => {
-                        const nextId = e.target.value;
-                        setManualProductId(nextId);
-                        const found = PRODUCTS.find(p => p.id === nextId);
-                        if (found) {
-                          setManualTotal(String(found.variants[0].price * Math.max(1, manualQty)));
-                        }
-                      }}
-                      className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-white outline-none focus:border-[#C5A880]"
-                    >
-                      {PRODUCTS.map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} (₹{p.variants[0].price})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] uppercase tracking-wider text-[#8A7463] block mb-1">
-                        Qty *
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={50}
-                        value={manualQty}
-                        onChange={e => {
-                          const q = Math.max(1, Number(e.target.value) || 1);
-                          setManualQty(q);
-                          const found = PRODUCTS.find(p => p.id === manualProductId);
-                          if (found) {
-                            setManualTotal(String(found.variants[0].price * q));
-                          }
-                        }}
-                        className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg font-mono text-white outline-none focus:border-[#C5A880]"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase tracking-wider text-[#8A7463] block mb-1">
-                        Amount (₹) *
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        required
-                        value={manualTotal}
-                        onChange={e => setManualTotal(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg font-mono font-bold text-[#C5A880] outline-none focus:border-[#C5A880]"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider text-[#8A7463] block mb-1">
-                      Payment Status
-                    </label>
-                    <select
-                      value={manualPaymentStatus}
-                      onChange={e => setManualPaymentStatus(e.target.value as 'PAID' | 'PENDING')}
-                      className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-white font-bold outline-none focus:border-[#C5A880]"
-                    >
-                      <option value="PAID">PAID (Payment Received)</option>
-                      <option value="PENDING">PENDING (Awaiting Payment)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider text-[#8A7463] block mb-1">
-                      UPI UTR / Ref (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={manualUtr}
-                      onChange={e => setManualUtr(e.target.value)}
-                      placeholder="12-digit UTR or leave blank"
-                      className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg font-mono text-white outline-none focus:border-[#C5A880]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider text-[#8A7463] block mb-1">
-                      Street / City (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={manualAddress}
-                      onChange={e => setManualAddress(e.target.value)}
-                      placeholder="Address (optional)"
-                      className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-white outline-none focus:border-[#C5A880]"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] uppercase tracking-wider text-[#8A7463] block mb-1">
-                        City
-                      </label>
-                      <input
-                        type="text"
-                        value={manualCity}
-                        onChange={e => setManualCity(e.target.value)}
-                        placeholder="City"
-                        className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-white outline-none focus:border-[#C5A880]"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase tracking-wider text-[#8A7463] block mb-1">
-                        Pincode
-                      </label>
-                      <input
-                        type="text"
-                        maxLength={6}
-                        value={manualPincode}
-                        onChange={e => setManualPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        placeholder="400001"
-                        className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg font-mono text-white outline-none focus:border-[#C5A880]"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowManualOrderForm(false)}
-                    className="px-3.5 py-2 bg-[#121110] hover:bg-[#1a1816] text-[#E8DFD1] rounded-lg border border-white/15 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isCreatingManualOrder}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase tracking-wider rounded-lg cursor-pointer disabled:opacity-60 shadow"
-                  >
-                    {isCreatingManualOrder ? 'Saving...' : 'Save & Sync Order'}
-                  </button>
-                </div>
-              </form>
-            )}
 
             {/* ORDERS SPLIT VIEW: LIST + DETAIL INSPECTOR */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
@@ -1369,30 +1087,13 @@ export const AdminDispatchModal: React.FC = () => {
                 />
 
                 {filteredOrders.length === 0 ? (
-                  <div className="p-6 text-center bg-[#23201D] rounded-2xl border border-white/10 text-xs text-[#8A7463] space-y-3">
+                  <div className="p-6 text-center bg-[#23201D] rounded-2xl border border-white/10 text-xs text-[#8A7463] space-y-1">
                     <div className="font-semibold text-white">No orders match this view</div>
                     <div>
                       {orders.length === 0
                         ? 'Orders placed via your UPI Scanner will appear here with customer phone numbers and verified transaction refs.'
                         : 'Try clearing your search or switching the status filter above.'}
                     </div>
-                    {!isFirebaseCloudConnected && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const res = await connectFirebaseCloudSync();
-                          if (res.ok) {
-                            showToast('Firebase Firestore Cloud Sync connected!');
-                          } else if (res.error) {
-                            showToast(res.error, 6000);
-                          }
-                        }}
-                        className="px-3.5 py-2 bg-[#C5A880] hover:bg-[#d4b993] text-[#121110] font-bold rounded-lg text-[11px] uppercase tracking-wider cursor-pointer inline-flex items-center gap-1.5"
-                      >
-                        <Database className="w-3.5 h-3.5" />
-                        <span>Sign In with Google to Load Customer Orders</span>
-                      </button>
-                    )}
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-[430px] overflow-y-auto pr-1">
