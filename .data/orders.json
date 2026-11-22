@@ -1,1 +1,541 @@
-[]
+[
+  {
+    "id": "HR-2026-7937",
+    "createdAt": "2026-11-22T18:30:03.694Z",
+    "customerPhone": "+91 9310091419",
+    "deliveryAddress": {
+      "recipientName": "yogesh jain",
+      "phoneNumber": "+91 9310091419",
+      "streetAddress": "Flat C 805 A, ajnara le garden ,greater noida",
+      "city": "Greater noida 201306",
+      "state": "UP",
+      "pincode": "201306"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PAID",
+    "orderStatus": "CONFIRMED",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-621428691",
+    "gatewayTransactionId": "UPI-RCVD-210919",
+    "paymentVerifiedAt": "2026-11-22T19:20:11.028Z"
+  },
+  {
+    "id": "HR-2026-2176",
+    "createdAt": "2026-11-22T17:32:23.104Z",
+    "customerPhone": "+91 8878776111",
+    "deliveryAddress": {
+      "recipientName": "Abhishek shivhare",
+      "phoneNumber": "+91 8878776111",
+      "streetAddress": "Behind of tehsil office",
+      "city": "Pincode 484224",
+      "state": "Maharashtra / Goa / MP / Chhattisgarh",
+      "pincode": "484224"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-735992412"
+  },
+  {
+    "id": "HR-2026-9520",
+    "createdAt": "2026-11-22T17:29:08.228Z",
+    "customerPhone": "+91 8878776111",
+    "deliveryAddress": {
+      "recipientName": "Abhishek shivhare",
+      "phoneNumber": "+91 8878776111",
+      "streetAddress": "Behind of tehsil office",
+      "city": "Pincode 484224",
+      "state": "M.p.",
+      "pincode": "484224"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-657464788"
+  },
+  {
+    "id": "HR-2026-3403",
+    "createdAt": "2026-11-22T17:25:44.584Z",
+    "customerPhone": "+91 8878776111",
+    "deliveryAddress": {
+      "recipientName": "Abhishek shivhare",
+      "phoneNumber": "+91 8878776111",
+      "streetAddress": "Behind tehsil eard no 9 anuppur mp",
+      "city": "Pincode 484224",
+      "state": "Mp",
+      "pincode": "484224"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-482587377"
+  },
+  {
+    "id": "HR-2026-8653",
+    "createdAt": "2026-11-22T11:55:11.368Z",
+    "customerPhone": "+91 8178006684",
+    "deliveryAddress": {
+      "recipientName": "Annapurna gupta",
+      "phoneNumber": "+91 8178006684",
+      "streetAddress": "Tower C flat number 1307, Thirteen floor",
+      "city": "Pincode 201306 Noida extension",
+      "state": "Up",
+      "pincode": "201306"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PAID",
+    "orderStatus": "CONFIRMED",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-428007071",
+    "gatewayTransactionId": "UPI-RCVD-274551",
+    "paymentVerifiedAt": "2026-11-22T19:21:14.663Z"
+  },
+  {
+    "id": "HR-2026-6359",
+    "createdAt": "2026-11-20T18:31:10.362Z",
+    "customerPhone": "+91 9310091419",
+    "deliveryAddress": {
+      "recipientName": "yogesh jain",
+      "phoneNumber": "+91 9310091419",
+      "streetAddress": "C 805 A ,Ajnara le garden ,sec 16 B",
+      "city": "Greater Noida",
+      "state": "Uttar pradesh",
+      "pincode": "201306"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-790031227"
+  },
+  {
+    "id": "HR-2026-2116",
+    "createdAt": "2026-11-20T07:25:56.062Z",
+    "customerPhone": "+91 8888888888",
+    "deliveryAddress": {
+      "recipientName": "Hairology Website",
+      "phoneNumber": "+91 8888888888",
+      "streetAddress": "404-Satyam accord , pancharatna complex",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "401101"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-830788848"
+  },
+  {
+    "id": "HR-2026-3997",
+    "createdAt": "2026-11-20T07:17:21.912Z",
+    "customerPhone": "+91 8888888888",
+    "deliveryAddress": {
+      "recipientName": "Hairology Website",
+      "phoneNumber": "+91 8888888888",
+      "streetAddress": "404-Satyam accord , pancharatna complex",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "401101"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-358099093"
+  },
+  {
+    "id": "HR-2026-8827",
+    "createdAt": "2026-11-20T07:17:01.765Z",
+    "customerPhone": "+91 8888888888",
+    "deliveryAddress": {
+      "recipientName": "Hairology Website",
+      "phoneNumber": "+91 8888888888",
+      "streetAddress": "404-Satyam accord , pancharatna complex",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "401101"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-963985551"
+  },
+  {
+    "id": "HR-2026-5674",
+    "createdAt": "2026-11-20T07:12:48.706Z",
+    "customerPhone": "+91 8888888888",
+    "deliveryAddress": {
+      "recipientName": "Hairology Website",
+      "phoneNumber": "+91 8888888888",
+      "streetAddress": "404-Satyam accord , pancharatna complex",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pincode": "401101"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-638553577"
+  },
+  {
+    "id": "HR-2026-6959",
+    "createdAt": "2026-11-20T04:56:55.947Z",
+    "customerPhone": "+91 9148290100",
+    "deliveryAddress": {
+      "recipientName": "Diya rathod",
+      "phoneNumber": "+91 9148290100",
+      "streetAddress": "Mumbau",
+      "city": "Pincode 400104",
+      "state": "Maharashtra / Goa / MP / Chhattisgarh",
+      "pincode": "400104"
+    },
+    "items": [
+      {
+        "productId": "the-duo",
+        "variantId": "duo-full",
+        "productName": "The Hairology Duo (Clarify & Reconstruct)",
+        "variantLabel": "Full Size Duo (2 x 250 ml)",
+        "price": 849,
+        "mrp": 999,
+        "quantity": 3,
+        "image": "/assets/aistudio/duo_hero.webp"
+      }
+    ],
+    "subtotal": 2547,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 2547,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-506462849"
+  },
+  {
+    "id": "HR-2026-8619",
+    "createdAt": "2026-11-19T18:37:16.579Z",
+    "customerPhone": "+91 9082541397",
+    "deliveryAddress": {
+      "recipientName": "Jxjx",
+      "phoneNumber": "+91 9082541397",
+      "streetAddress": "373 my road",
+      "city": "Pincode 400069",
+      "state": "Maharashtra",
+      "pincode": "400069"
+    },
+    "items": [
+      {
+        "productId": "hot-water-shampoo",
+        "variantId": "hot-full",
+        "productName": "Hot Water Shampoo (Heat Shield + Clarify)",
+        "variantLabel": "Full Size (250 ml)",
+        "price": 449,
+        "mrp": 499,
+        "quantity": 2,
+        "image": "/assets/aistudio/hot_water_front.webp"
+      }
+    ],
+    "subtotal": 898,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 898,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-353580898"
+  },
+  {
+    "id": "HR-2026-4264",
+    "createdAt": "2026-11-18T08:49:02.366Z",
+    "customerPhone": "+91 8282828282",
+    "deliveryAddress": {
+      "recipientName": "Shivanshi singha",
+      "phoneNumber": "+91 8282828282",
+      "streetAddress": "51 shivam colony",
+      "city": "Pincode 111111",
+      "state": "Delhi / Haryana / Punjab / HP / J&K",
+      "pincode": "111111"
+    },
+    "items": [
+      {
+        "productId": "the-duo",
+        "variantId": "duo-full",
+        "productName": "The Hairology Duo (Clarify & Reconstruct)",
+        "variantLabel": "Full Size Duo (2 x 250 ml)",
+        "price": 849,
+        "mrp": 999,
+        "quantity": 1,
+        "image": "/assets/aistudio/duo_hero.webp"
+      }
+    ],
+    "subtotal": 849,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 849,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-432323364"
+  },
+  {
+    "id": "HR-2026-4226",
+    "createdAt": "2026-11-18T07:29:37.138Z",
+    "customerPhone": "+91 8591159706",
+    "deliveryAddress": {
+      "recipientName": "Ssanchi Agarwal",
+      "phoneNumber": "+91 8591159706",
+      "streetAddress": "404- satyam accord pancharatna complex bhayander west",
+      "city": "THANE",
+      "state": "MAHARASHTRA",
+      "pincode": "401101"
+    },
+    "items": [
+      {
+        "productId": "the-duo",
+        "variantId": "duo-full",
+        "productName": "The Hairology Duo (Clarify & Reconstruct)",
+        "variantLabel": "Full Size Duo (2 x 250 ml)",
+        "price": 849,
+        "mrp": 999,
+        "quantity": 2,
+        "image": "/assets/aistudio/duo_hero.webp"
+      }
+    ],
+    "subtotal": 1698,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1698,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-322097926"
+  },
+  {
+    "id": "HR-2026-6278",
+    "createdAt": "2026-11-17T19:51:49.060Z",
+    "customerPhone": "+91 7231801984",
+    "deliveryAddress": {
+      "recipientName": "Gamer Bolide",
+      "phoneNumber": "+91 7231801984",
+      "streetAddress": "bhayandar",
+      "city": "bhayandar",
+      "state": "Maharashtra",
+      "pincode": "401101"
+    },
+    "items": [
+      {
+        "productId": "the-duo",
+        "variantId": "duo-full",
+        "productName": "The Hairology Duo (Clarify & Reconstruct)",
+        "variantLabel": "Full Size Duo (2 x 250 ml)",
+        "price": 849,
+        "mrp": 999,
+        "quantity": 1,
+        "image": "/assets/aistudio/duo_hero.webp"
+      },
+      {
+        "productId": "hot-water-shampoo",
+        "variantId": "hot-full",
+        "productName": "Hot Water Shampoo (Heat Shield + Clarify)",
+        "variantLabel": "Full Size (250 ml)",
+        "price": 449,
+        "mrp": 499,
+        "quantity": 1,
+        "image": "/assets/aistudio/hot_water_front.webp"
+      }
+    ],
+    "subtotal": 1298,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1298,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PENDING",
+    "orderStatus": "PENDING_CONFIRMATION",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-513623047"
+  }
+]

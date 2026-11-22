@@ -1,0 +1,76 @@
+[
+  {
+    "id": "HR-2026-7937",
+    "createdAt": "2026-11-22T18:30:03.694Z",
+    "customerPhone": "+91 9310091419",
+    "deliveryAddress": {
+      "recipientName": "yogesh jain",
+      "phoneNumber": "+91 9310091419",
+      "streetAddress": "Flat C 805 A, ajnara le garden ,greater noida",
+      "city": "Greater noida 201306",
+      "state": "UP",
+      "pincode": "201306"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PAID",
+    "orderStatus": "CONFIRMED",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-621428691",
+    "gatewayTransactionId": "UPI-RCVD-210919",
+    "paymentVerifiedAt": "2026-11-22T19:20:11.028Z"
+  },
+  {
+    "id": "HR-2026-8653",
+    "createdAt": "2026-11-22T11:55:11.368Z",
+    "customerPhone": "+91 8178006684",
+    "deliveryAddress": {
+      "recipientName": "Annapurna gupta",
+      "phoneNumber": "+91 8178006684",
+      "streetAddress": "Tower C flat number 1307, Thirteen floor",
+      "city": "Pincode 201306 Noida extension",
+      "state": "Up",
+      "pincode": "201306"
+    },
+    "items": [
+      {
+        "productId": "the-trio",
+        "variantId": "trio-full",
+        "productName": "The Hairology Trio",
+        "variantLabel": "Complete Trio (3 x 250 ml)",
+        "price": 1299,
+        "mrp": 1599,
+        "quantity": 1,
+        "image": "/assets/aistudio/IMG_4051_0f6651aa.PNG"
+      }
+    ],
+    "subtotal": 1299,
+    "discount": 0,
+    "shipping": 0,
+    "codFee": 0,
+    "total": 1299,
+    "paymentMethod": "UPI_QR",
+    "paymentStatus": "PAID",
+    "orderStatus": "CONFIRMED",
+    "payerUpi": "guddan1102@okhdfcbank",
+    "trackingNumber": "DELHIVERY-AWB-428007071",
+    "gatewayTransactionId": "UPI-RCVD-274551",
+    "paymentVerifiedAt": "2026-11-22T19:21:14.663Z"
+  }
+]

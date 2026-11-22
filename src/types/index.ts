@@ -107,6 +107,7 @@ export interface Order {
   trackingNumber?: string;
   payerName?: string;
   payerUpi?: string;
+  paymentInitiated?: boolean;
 }
 
 export interface ProductSalesMetric {

@@ -40,6 +40,18 @@ const DEFAULT_STATIC_FOUNDER_CODE = '4448989';
 const FOUNDER_CODE_STORAGE_KEY = 'hairology_founder_access_code_v1';
 const AUTH_SESSION_KEY = 'hairology_admin_auth_v2';
 const AUTH_CREDS_KEY = 'hairology_founder_creds_v1';
+const WHATSAPP_SENT_STORAGE_KEY = 'hairology_whatsapp_prompt_done_v1';
+
+function readWhatsappPromptDoneIds(): string[] {
+  try {
+    const raw = localStorage.getItem(WHATSAPP_SENT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
 
 function getStoredFounderCode(): string {
   try {
@@ -81,11 +93,8 @@ export const AdminDispatchModal: React.FC = () => {
     updateOrderStatus,
     founderVerifyUpiPayment,
     founderMarkPaymentFailed,
-    founderResetAllOrders,
-    firebaseAdminEmail,
-    isFirebaseCloudConnected,
-    firebaseSyncError,
-    connectFirebaseCloudSync
+    founderDeleteUnpaidOrder,
+    founderClearUnpaidOrders
   } = useCart();
 
   // Two-Step Authentication Gate State (Gmail -> Access Code)
@@ -105,17 +114,40 @@ export const AdminDispatchModal: React.FC = () => {
   const [codeChangeMsg, setCodeChangeMsg] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'webhooks' | 'schema'>('orders');
-  const [statusFilter, setStatusFilter] = useState<OrderFilterType>('ALL');
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(orders[0]?.id || null);
+  const [statusFilter, setStatusFilter] = useState<OrderFilterType>('PAID');
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [whatsappToast, setWhatsappToast] = useState<string | null>(null);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
-  const [verifyUtrInput, setVerifyUtrInput] = useState('');
   const [isVerifyingUtr, setIsVerifyingUtr] = useState(false);
   const [isMarkingFailed, setIsMarkingFailed] = useState(false);
+  const [isDeletingUnpaid, setIsDeletingUnpaid] = useState(false);
+  const [isClearingUnpaid, setIsClearingUnpaid] = useState(false);
   const [justVerifiedOrderId, setJustVerifiedOrderId] = useState<string | null>(null);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [isResettingOrders, setIsResettingOrders] = useState(false);
+  const [whatsappPromptDoneIds, setWhatsappPromptDoneIds] = useState<string[]>(() =>
+    readWhatsappPromptDoneIds()
+  );
+
+  const markWhatsappPromptDone = (orderId: string) => {
+    setWhatsappPromptDoneIds(prev => {
+      if (prev.includes(orderId)) return prev;
+      const next = [...prev, orderId];
+      try {
+        localStorage.setItem(WHATSAPP_SENT_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    setJustVerifiedOrderId(prev => (prev === orderId ? null : prev));
+  };
+
+  const handleSelectOrder = (orderId: string) => {
+    if (justVerifiedOrderId && justVerifiedOrderId !== orderId) {
+      markWhatsappPromptDone(justVerifiedOrderId);
+    }
+    setSelectedOrderId(orderId);
+  };
 
   // Fetch live server orders whenever authenticated panel opens, and auto-refresh every 3 seconds
   useEffect(() => {
@@ -269,6 +301,9 @@ export const AdminDispatchModal: React.FC = () => {
   };
 
   const handleLockSession = () => {
+    if (justVerifiedOrderId) {
+      markWhatsappPromptDone(justVerifiedOrderId);
+    }
     try {
       sessionStorage.removeItem(AUTH_SESSION_KEY);
       sessionStorage.removeItem(AUTH_CREDS_KEY);
@@ -356,7 +391,15 @@ export const AdminDispatchModal: React.FC = () => {
     }
   };
 
-  const filteredOrders = orders.filter(ord => {
+  const visibleOrders = orders.filter(
+    ord => ord.paymentStatus === 'PAID' || ord.paymentInitiated !== false
+  );
+
+  const awaitingPaymentCount = visibleOrders.filter(
+    ord => ord.paymentStatus !== 'PAID' && ord.paymentStatus !== 'FAILED' && ord.orderStatus !== 'PAYMENT_FAILED'
+  ).length;
+
+  const filteredOrders = visibleOrders.filter(ord => {
     const matchesFilter = (() => {
       if (statusFilter === 'ALL') return true;
       if (statusFilter === 'PAID') return ord.paymentStatus === 'PAID';
@@ -384,9 +427,8 @@ export const AdminDispatchModal: React.FC = () => {
 
   const selectedOrder =
     filteredOrders.find(o => o.id === selectedOrderId) ||
-    orders.find(o => o.id === selectedOrderId) ||
     filteredOrders[0] ||
-    orders[0];
+    null;
 
   const handleStatusChange = async (orderId: string, newStatus: Order['orderStatus']) => {
     if (!savedCreds) return;
@@ -398,18 +440,19 @@ export const AdminDispatchModal: React.FC = () => {
     }
   };
 
-  const handleVerifyUpiPayment = async (e: React.FormEvent, orderId: string) => {
-    e.preventDefault();
+  const handleVerifyUpiPayment = async (orderId: string) => {
     if (!savedCreds) return;
-    const cleanRef = verifyUtrInput.trim();
     setIsVerifyingUtr(true);
-    const res = await founderVerifyUpiPayment(orderId, cleanRef, savedCreds);
+    const res = await founderVerifyUpiPayment(orderId, '', savedCreds);
     setIsVerifyingUtr(false);
     if (res.ok) {
-      setVerifyUtrInput('');
-      setJustVerifiedOrderId(orderId);
+      if (!whatsappPromptDoneIds.includes(orderId)) {
+        setJustVerifiedOrderId(orderId);
+      }
+      setStatusFilter('PAID');
+      setSelectedOrderId(orderId);
     }
-    showToast(res.message || 'Processed UPI verification.');
+    showToast(res.message || 'Order confirmed.');
   };
 
   const handleMarkPaymentFailed = async (orderId: string) => {
@@ -420,23 +463,31 @@ export const AdminDispatchModal: React.FC = () => {
     showToast(res.message || 'Updated payment status.');
   };
 
-  const handleTestWebhook = () => {
-    showToast(`Test notification ready for ${ADMIN_PHONE} via Hairology Notification Bridge.`);
+  const handleDeleteUnpaidOrder = async (orderId: string) => {
+    if (!savedCreds) return;
+    setIsDeletingUnpaid(true);
+    const res = await founderDeleteUnpaidOrder(orderId, savedCreds);
+    setIsDeletingUnpaid(false);
+    if (res.ok && selectedOrderId === orderId) {
+      setSelectedOrderId(null);
+    }
+    showToast(res.message || 'Removed non-paying visitor entry.');
   };
 
-  const handleConfirmResetPanel = async () => {
+  const handleClearAllUnpaidOrders = async () => {
     if (!savedCreds) return;
-    setIsResettingOrders(true);
-    const res = await founderResetAllOrders(savedCreds);
-    setIsResettingOrders(false);
-    setShowResetConfirm(false);
+    setIsClearingUnpaid(true);
+    const res = await founderClearUnpaidOrders(savedCreds);
+    setIsClearingUnpaid(false);
     if (res.ok) {
       setSelectedOrderId(null);
-      setJustVerifiedOrderId(null);
-      setOrderSearchQuery('');
-      setStatusFilter('ALL');
+      setStatusFilter('PAID');
     }
-    showToast(res.message || 'Founder Panel cleared.');
+    showToast(res.message || 'Cleared unpaid visitor entries.');
+  };
+
+  const handleTestWebhook = () => {
+    showToast(`Test notification ready for ${ADMIN_PHONE} via Hairology Notification Bridge.`);
   };
 
   const getCleanPhone = (phoneStr: string) => {
@@ -445,7 +496,7 @@ export const AdminDispatchModal: React.FC = () => {
   };
 
   const getCustomerThankYouMessage = (order: Order) => {
-    return `✨ THANK YOU FOR YOUR HAIROLOGY ORDER! ✨\n\nDear ${order.deliveryAddress.recipientName},\nThank you for choosing HAIROLOGY Haute-Beauté Haircare! Your UPI payment of ₹${order.total} has been confirmed.\n\n📦 ORDER SUMMARY:\n• Order ID: #${order.id}\n• UPI Transaction Ref: ${order.gatewayTransactionId || 'Verified'}\n• Amount Paid: ₹${order.total} (PAID)\n• Delivery Status: ${order.orderStatus.replace(/_/g, ' ')}\n• Date: ${new Date(order.createdAt).toLocaleDateString('en-IN')}\n\n🛍️ ITEMS ORDERED:\n${order.items.map(it => `• ${it.quantity}x ${it.productName} (${it.variantLabel}) - ₹${it.price * it.quantity}`).join('\n')}\n\n📍 DELIVERY ADDRESS:\n${order.deliveryAddress.recipientName}\n${order.deliveryAddress.streetAddress}, ${order.deliveryAddress.city} - ${order.deliveryAddress.pincode} (${order.deliveryAddress.state})\nPhone: ${order.customerPhone}\n\n🚚 DISPATCH & TRACKING:\n• Courier Partner: Delhivery Express\n• AWB Tracking: ${order.trackingNumber || 'Assigned on Dispatch'}\n\nHairology team personally packing your order.\n\nThank you for supporting Hairology! 🌿`;
+    return `✨ THANK YOU FOR YOUR HAIROLOGY ORDER! ✨\n\nDear ${order.deliveryAddress.recipientName},\nThank you for choosing HAIROLOGY Haute-Beauté Haircare! Your UPI payment of ₹${order.total} has been confirmed.\n\n📦 ORDER SUMMARY:\n• Order ID: #${order.id}\n• Amount Paid: ₹${order.total} (PAID)\n• Delivery Status: ${order.orderStatus.replace(/_/g, ' ')}\n• Date: ${new Date(order.createdAt).toLocaleDateString('en-IN')}\n\n🛍️ ITEMS ORDERED:\n${order.items.map(it => `• ${it.quantity}x ${it.productName} (${it.variantLabel}) - ₹${it.price * it.quantity}`).join('\n')}\n\n📍 DELIVERY ADDRESS:\n${order.deliveryAddress.recipientName}\n${order.deliveryAddress.streetAddress}, ${order.deliveryAddress.city} - ${order.deliveryAddress.pincode} (${order.deliveryAddress.state})\nPhone: ${order.customerPhone}\n\n🚚 DISPATCH & TRACKING:\n• Courier Partner: Delhivery Express\n• AWB Tracking: ${order.trackingNumber || 'Assigned on Dispatch'}\n\nHairology team personally packing your order.\n\nThank you for supporting Hairology! 🌿`;
   };
 
   const getOwnerOrderDetailsMessage = (order: Order) => {
@@ -457,7 +508,23 @@ export const AdminDispatchModal: React.FC = () => {
       .map(it => `• ${it.quantity}x ${it.productName} (${it.variantLabel}) — ₹${it.price * it.quantity}`)
       .join('\n');
 
-    return `🛍️ HAIROLOGY ORDER DETAILS (#${order.id})\n📅 Date: ${formattedDate}\n\n👤 WHO ORDERED:\n• Name: ${order.deliveryAddress.recipientName}\n• Phone: ${order.customerPhone}\n\n📍 FULL DELIVERY ADDRESS:\n${order.deliveryAddress.streetAddress}\n${order.deliveryAddress.city}, ${order.deliveryAddress.state} - ${order.deliveryAddress.pincode}\n\n📦 WHAT WAS ORDERED:\n${itemsList}\n\n💰 BILLING & PAYMENT:\n• Subtotal: ₹${order.subtotal}${order.discount > 0 ? `\n• Discount${order.couponApplied ? ` (${order.couponApplied})` : ''}: -₹${order.discount}` : ''}\n• Shipping: ${order.shipping === 0 ? 'FREE' : `₹${order.shipping}`}\n• Grand Total: ₹${order.total}\n• Payment Status: ${order.paymentStatus}${order.gatewayTransactionId ? ` (UTR: ${order.gatewayTransactionId})` : ''}\n• Delivery Status: ${order.orderStatus.replace(/_/g, ' ')}\n• AWB Tracking: ${order.trackingNumber || 'Pending'}`;
+    return `🛍️ HAIROLOGY ORDER DETAILS (#${order.id})\n📅 Date: ${formattedDate}\n\n👤 WHO ORDERED:\n• Name: ${order.deliveryAddress.recipientName}\n• Phone: ${order.customerPhone}\n\n📍 FULL DELIVERY ADDRESS:\n${order.deliveryAddress.streetAddress}\n${order.deliveryAddress.city}, ${order.deliveryAddress.state} - ${order.deliveryAddress.pincode}\n\n📦 WHAT WAS ORDERED:\n${itemsList}\n\n💰 BILLING & PAYMENT:\n• Subtotal: ₹${order.subtotal}${order.discount > 0 ? `\n• Discount${order.couponApplied ? ` (${order.couponApplied})` : ''}: -₹${order.discount}` : ''}\n• Shipping: ${order.shipping === 0 ? 'FREE' : `₹${order.shipping}`}\n• Grand Total: ₹${order.total}\n• Payment Status: ${order.paymentStatus}\n• Delivery Status: ${order.orderStatus.replace(/_/g, ' ')}\n• AWB Tracking: ${order.trackingNumber || 'Pending'}`;
+  };
+
+  const getAllOrdersSummaryMessage = (list: Order[]) => {
+    const slice = list.slice(0, 15);
+    const lines = slice.map((ord, idx) => {
+      const dt = new Date(ord.createdAt).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+      const itemsText = ord.items.map(i => `${i.quantity}x ${i.productName}`).join(', ');
+      return `${idx + 1}. #${ord.id} (${dt}) — ₹${ord.total} [${ord.paymentStatus}]\n   Name: ${ord.deliveryAddress.recipientName} | ${ord.customerPhone}\n   Address: ${ord.deliveryAddress.streetAddress}, ${ord.deliveryAddress.city} - ${ord.deliveryAddress.pincode}\n   Items: ${itemsText}`;
+    });
+    const extraNote = list.length > 15 ? `\n\n(+${list.length - 15} more orders in Founder Panel)` : '';
+    const heading = statusFilter === 'PAID' ? 'PAID ORDERS SUMMARY' : 'ORDERS SUMMARY';
+    return `📊 HAIROLOGY ${heading} (${list.length} Orders | Paid Sales: ₹${analytics.totalSales})\n\n${lines.join('\n\n')}${extraNote}`;
   };
 
   const getStatusBadgeClasses = (ord: Order) => {
@@ -716,35 +783,6 @@ export const AdminDispatchModal: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={async () => {
-                if (isFirebaseCloudConnected) {
-                  showToast(`Firebase Firestore Live (${firebaseAdminEmail})`);
-                } else {
-                  const res = await connectFirebaseCloudSync();
-                  if (res.ok) {
-                    showToast('Firebase Firestore Cloud Sync connected!');
-                  } else if (res.error) {
-                    showToast(res.error);
-                  }
-                }
-              }}
-              title={
-                isFirebaseCloudConnected
-                  ? `Firebase Firestore Connected (${firebaseAdminEmail})`
-                  : 'Sync Cloud Orders (Firebase)'
-              }
-              className={`px-2 py-1.5 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
-                isFirebaseCloudConnected
-                  ? 'bg-emerald-950/50 text-emerald-300 border-emerald-500/30'
-                  : 'bg-[#23201D] hover:bg-[#322E2A] text-[#C5A880] border-[#C5A880]/30'
-              }`}
-            >
-              <Database className="w-3 h-3" />
-              <span className="hidden sm:inline">{isFirebaseCloudConnected ? 'Cloud Live' : 'Cloud Sync'}</span>
-            </button>
-
-            <button
-              type="button"
               onClick={handleRefreshLiveOrders}
               disabled={isLoadingOrders}
               className="px-2.5 py-1.5 bg-[#23201D] hover:bg-[#322E2A] text-emerald-300 text-[11px] font-semibold rounded-lg border border-emerald-500/30 transition-colors cursor-pointer flex items-center gap-1.5"
@@ -762,16 +800,6 @@ export const AdminDispatchModal: React.FC = () => {
             >
               <Key className="w-3 h-3" />
               <span>Change Code</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowResetConfirm(!showResetConfirm)}
-              className="px-2.5 py-1.5 bg-[#23201D] hover:bg-red-950/60 text-red-300 text-[11px] font-semibold rounded-lg border border-red-500/30 transition-colors cursor-pointer flex items-center gap-1.5"
-              title="Clear All Previous Orders"
-            >
-              <Trash2 className="w-3 h-3" />
-              <span className="hidden sm:inline">Clear Data</span>
             </button>
 
             <button
@@ -794,33 +822,6 @@ export const AdminDispatchModal: React.FC = () => {
             </button>
           </div>
         </div>
-
-        {/* Confirm Clear All Previous Data Bar */}
-        {showResetConfirm && (
-          <div className="p-3 bg-red-950/50 border-b border-red-500/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <span className="text-red-200 font-medium flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-              <span>Permanently delete all previous orders from this panel (Local, Server &amp; Cloud Sync)?</span>
-            </span>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleConfirmResetPanel}
-                disabled={isResettingOrders}
-                className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs cursor-pointer disabled:opacity-60"
-              >
-                {isResettingOrders ? 'Clearing...' : 'Yes, Give Fresh Panel'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowResetConfirm(false)}
-                className="px-3 py-1.5 bg-[#23201D] hover:bg-[#322E2A] text-[#E8DFD1] font-semibold rounded-lg text-xs border border-white/10 cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Change Access Code Bar */}
         {showChangeCode && (
@@ -863,7 +864,7 @@ export const AdminDispatchModal: React.FC = () => {
             }`}
           >
             <Package className="w-4 h-4" />
-            <span>Sales & Orders ({orders.length})</span>
+            <span>Paid Orders ({analytics.successfulPaymentsCount})</span>
           </button>
 
           <button
@@ -914,42 +915,14 @@ export const AdminDispatchModal: React.FC = () => {
           </div>
         )}
 
-        {/* Firebase Cloud Sync Notice Banner (for multi-device live sync on Vercel / web) */}
-        {!isFirebaseCloudConnected && (
-          <div className="bg-[#262018] border-b border-[#C5A880]/30 px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
-            <div className="text-[#E8DFD1] flex items-center gap-2 text-center sm:text-left">
-              <Database className="w-4 h-4 text-[#C5A880] shrink-0 hidden sm:block" />
-              <span>
-                {firebaseSyncError
-                  ? firebaseSyncError
-                  : 'Connect Firebase Cloud Sync to view and confirm orders placed from customer phones in real time.'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
-                const res = await connectFirebaseCloudSync();
-                if (res.ok) {
-                  showToast('Firebase Firestore Cloud Sync connected!');
-                } else if (res.error) {
-                  showToast(res.error, 6000);
-                }
-              }}
-              className="px-3 py-1.5 bg-[#C5A880] hover:bg-[#d4b993] text-[#121110] font-bold rounded-lg text-[11px] uppercase tracking-wider shrink-0 cursor-pointer"
-            >
-              Connect Cloud Sync
-            </button>
-          </div>
-        )}
-
         {/* ================= TAB 1: EXECUTIVE ANALYTICS + CUSTOMER ORDERS & DELIVERY ================= */}
         {activeTab === 'orders' && (
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
 
-            {/* 6 EXECUTIVE KPI SUMMARY CARDS */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* 5 PAID-ONLY EXECUTIVE KPI SUMMARY CARDS */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* 1. Total Sales */}
-              <div className="bg-gradient-to-br from-[#2A241A] to-[#1A1714] p-3.5 rounded-2xl border border-[#C5A880]/40">
+              <div className="bg-gradient-to-br from-[#2A241A] to-[#1A1714] p-3.5 rounded-2xl border border-[#C5A880]/40 col-span-2 sm:col-span-1">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-[#C5A880] flex items-center justify-between">
                   <span>Total Sales</span>
                   <TrendingUp className="w-3.5 h-3.5 text-[#C5A880]" />
@@ -960,13 +933,13 @@ export const AdminDispatchModal: React.FC = () => {
                 <div className="text-[10px] text-[#8A7463] mt-0.5">Verified paid revenue</div>
               </div>
 
-              {/* 2. Successful Payments */}
+              {/* 2. Paid Orders */}
               <div
                 onClick={() => setStatusFilter('PAID')}
                 className="bg-[#23201D] hover:bg-[#292521] p-3.5 rounded-2xl border border-emerald-500/30 cursor-pointer transition-colors"
               >
                 <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center justify-between">
-                  <span>Successful Pay</span>
+                  <span>Paid Orders</span>
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 </div>
                 <div className="font-serif text-xl sm:text-2xl font-bold text-emerald-300 mt-1 tabular-nums">
@@ -977,41 +950,22 @@ export const AdminDispatchModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* 3. Failed Payments */}
+              {/* 3. Confirmed / Packing */}
               <div
-                onClick={() => setStatusFilter('FAILED')}
-                className="bg-[#23201D] hover:bg-[#292521] p-3.5 rounded-2xl border border-red-500/30 cursor-pointer transition-colors"
+                onClick={() => setStatusFilter('CONFIRMED')}
+                className="bg-[#23201D] hover:bg-[#292521] p-3.5 rounded-2xl border border-[#C5A880]/30 cursor-pointer transition-colors"
               >
-                <div className="text-[10px] font-bold uppercase tracking-wider text-red-400 flex items-center justify-between">
-                  <span>Failed Pay</span>
-                  <XCircle className="w-3.5 h-3.5 text-red-400" />
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#C5A880] flex items-center justify-between">
+                  <span>Confirmed</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#C5A880]" />
                 </div>
-                <div className="font-serif text-xl sm:text-2xl font-bold text-red-300 mt-1 tabular-nums">
-                  {analytics.failedPaymentsCount}
+                <div className="font-serif text-xl sm:text-2xl font-bold text-white mt-1 tabular-nums">
+                  {analytics.deliveryStatusBreakdown.CONFIRMED}
                 </div>
-                <div className="text-[10px] text-red-400/80 font-mono mt-0.5">
-                  ₹{analytics.failedPaymentsAmount.toLocaleString('en-IN')} failed
-                </div>
+                <div className="text-[10px] text-[#8A7463] mt-0.5">Ready to pack &amp; ship</div>
               </div>
 
-              {/* 4. Pending Orders */}
-              <div
-                onClick={() => setStatusFilter('PENDING')}
-                className="bg-[#23201D] hover:bg-[#292521] p-3.5 rounded-2xl border border-amber-500/30 cursor-pointer transition-colors"
-              >
-                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center justify-between">
-                  <span>Pending Orders</span>
-                  <Clock className="w-3.5 h-3.5 text-amber-400" />
-                </div>
-                <div className="font-serif text-xl sm:text-2xl font-bold text-amber-300 mt-1 tabular-nums">
-                  {analytics.pendingOrdersCount}
-                </div>
-                <div className="text-[10px] text-amber-400/80 font-mono mt-0.5">
-                  ₹{analytics.pendingOrdersAmount.toLocaleString('en-IN')} unpaid
-                </div>
-              </div>
-
-              {/* 5. In Transit / Dispatched */}
+              {/* 4. In Transit */}
               <div
                 onClick={() => setStatusFilter('DISPATCHED')}
                 className="bg-[#23201D] hover:bg-[#292521] p-3.5 rounded-2xl border border-blue-500/30 cursor-pointer transition-colors"
@@ -1026,7 +980,7 @@ export const AdminDispatchModal: React.FC = () => {
                 <div className="text-[10px] text-[#8A7463] mt-0.5">Dispatched + OFD</div>
               </div>
 
-              {/* 6. Delivered */}
+              {/* 5. Delivered */}
               <div
                 onClick={() => setStatusFilter('DELIVERED')}
                 className="bg-[#23201D] hover:bg-[#292521] p-3.5 rounded-2xl border border-white/10 cursor-pointer transition-colors"
@@ -1047,10 +1001,7 @@ export const AdminDispatchModal: React.FC = () => {
               <div className="flex flex-wrap items-center gap-1.5">
                 {(
                   [
-                    { key: 'ALL', label: `All (${orders.length})` },
-                    { key: 'PAID', label: `Paid (${analytics.successfulPaymentsCount})` },
-                    { key: 'PENDING', label: `Pending (${analytics.pendingOrdersCount})` },
-                    { key: 'FAILED', label: `Failed (${analytics.failedPaymentsCount})` },
+                    { key: 'PAID', label: `Paid Customers Only (${analytics.successfulPaymentsCount})` },
                     { key: 'CONFIRMED', label: `Confirmed (${analytics.deliveryStatusBreakdown.CONFIRMED})` },
                     { key: 'DISPATCHED', label: `Dispatched (${analytics.deliveryStatusBreakdown.DISPATCHED})` },
                     { key: 'OUT_FOR_DELIVERY', label: `Out for Delivery (${analytics.deliveryStatusBreakdown.OUT_FOR_DELIVERY})` },
@@ -1071,6 +1022,34 @@ export const AdminDispatchModal: React.FC = () => {
                   </button>
                 ))}
               </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(awaitingPaymentCount > 0 || statusFilter === 'PENDING') && (
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter('PENDING')}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer border ${
+                      statusFilter === 'PENDING'
+                        ? 'bg-amber-400 text-[#121110] border-amber-400'
+                        : 'bg-amber-950/40 text-amber-300 border-amber-500/30 hover:border-amber-400'
+                    }`}
+                  >
+                    Awaiting Confirmation ({awaitingPaymentCount})
+                  </button>
+                )}
+
+                {statusFilter === 'PENDING' && awaitingPaymentCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllUnpaidOrders}
+                    disabled={isClearingUnpaid}
+                    className="px-2.5 py-1 bg-red-950/60 hover:bg-red-900/70 text-red-200 border border-red-500/40 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>{isClearingUnpaid ? 'Cleaning...' : 'Remove Non-Paying Visitors'}</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* ORDERS SPLIT VIEW: LIST + DETAIL INSPECTOR */}
@@ -1082,25 +1061,40 @@ export const AdminDispatchModal: React.FC = () => {
                   type="text"
                   value={orderSearchQuery}
                   onChange={e => setOrderSearchQuery(e.target.value)}
-                  placeholder="Search customer name, phone no, product, order ID, UTR..."
+                  placeholder="Search paid customer name, phone no, product..."
                   className="w-full text-xs px-3.5 py-2.5 bg-[#121110] border border-white/15 rounded-xl text-white placeholder-[#8A7463] outline-none focus:border-[#C5A880]"
                 />
 
                 {filteredOrders.length === 0 ? (
-                  <div className="p-6 text-center bg-[#23201D] rounded-2xl border border-white/10 text-xs text-[#8A7463] space-y-1">
-                    <div className="font-semibold text-white">No orders match this view</div>
-                    <div>
-                      {orders.length === 0
-                        ? 'Orders placed via your UPI Scanner will appear here with customer phone numbers and verified transaction refs.'
-                        : 'Try clearing your search or switching the status filter above.'}
+                  <div className="p-6 text-center bg-[#23201D] rounded-2xl border border-white/10 text-xs text-[#8A7463] space-y-3">
+                    <div className="font-semibold text-white">
+                      {statusFilter === 'PAID'
+                        ? 'No Confirmed Paid Customers Yet'
+                        : 'No orders match this view'}
                     </div>
+                    <div className="leading-relaxed">
+                      {statusFilter === 'PAID'
+                        ? 'Only customers whose payment is confirmed appear here — website visitors who did not complete payment are hidden.'
+                        : orders.length === 0
+                          ? 'Confirmed UPI payments will appear here with customer names, phone numbers, and delivery addresses.'
+                          : 'Try clearing your search or switching the filter tab above.'}
+                    </div>
+                    {statusFilter === 'PAID' && awaitingPaymentCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setStatusFilter('PENDING')}
+                        className="mt-1 px-3.5 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 rounded-xl text-[11px] font-bold cursor-pointer transition-colors"
+                      >
+                        Review Awaiting Confirmation ({awaitingPaymentCount}) →
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-[430px] overflow-y-auto pr-1">
                     {filteredOrders.map(ord => (
                       <div
                         key={ord.id}
-                        onClick={() => setSelectedOrderId(ord.id)}
+                        onClick={() => handleSelectOrder(ord.id)}
                         className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
                           selectedOrder?.id === ord.id
                             ? 'border-[#C5A880] bg-[#2A2622] shadow'
@@ -1191,17 +1185,26 @@ export const AdminDispatchModal: React.FC = () => {
                           <span className="text-[10px] font-mono bg-emerald-900/70 px-2 py-0.5 rounded">PAID</span>
                         </div>
                         <div className="text-[11px] font-mono text-emerald-200/80 flex flex-wrap gap-x-4 gap-y-1">
-                          <span>UPI UTR Ref: <strong>{selectedOrder.gatewayTransactionId || 'Verified'}</strong></span>
+                          <span>Status: <strong>Confirmed by Founder</strong></span>
                           <span>UPI ID: {USER_UPI_ID}</span>
                         </div>
                       </div>
                     ) : selectedOrder.paymentStatus === 'FAILED' || selectedOrder.orderStatus === 'PAYMENT_FAILED' ? (
                       <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-500/40 space-y-2 text-xs">
-                        <div className="flex items-center justify-between text-red-300 font-bold">
+                        <div className="flex items-center justify-between text-red-300 font-bold gap-2">
                           <span className="flex items-center gap-1.5">
                             <XCircle className="w-4 h-4 text-red-400" />
                             <span>Payment Failed / Not Received</span>
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUnpaidOrder(selectedOrder.id)}
+                            disabled={isDeletingUnpaid}
+                            className="px-2.5 py-1 bg-[#121110] hover:bg-red-900 text-red-200 border border-red-500/40 rounded-lg text-[10px] font-bold cursor-pointer disabled:opacity-60 flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>{isDeletingUnpaid ? 'Removing...' : 'Remove Visitor'}</span>
+                          </button>
                         </div>
                         <div className="text-[11px] text-red-200/90">
                           Reason: <strong>{selectedOrder.paymentFailureReason || 'No UPI payment received'}</strong>
@@ -1209,49 +1212,49 @@ export const AdminDispatchModal: React.FC = () => {
                       </div>
                     ) : (
                       <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/40 space-y-3 text-xs">
-                        <div className="flex items-center justify-between text-amber-300 font-bold">
+                        <div className="flex items-center justify-between text-amber-300 font-bold gap-2 flex-wrap">
                           <span className="flex items-center gap-1.5">
                             <Clock className="w-4 h-4 text-amber-400" />
-                            <span>Awaiting UPI Payment Confirmation (₹{selectedOrder.total})</span>
+                            <span>Awaiting Your Confirmation (₹{selectedOrder.total})</span>
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleMarkPaymentFailed(selectedOrder.id)}
-                            disabled={isMarkingFailed}
-                            className="px-2.5 py-1 bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-500/40 rounded-lg text-[10px] font-bold cursor-pointer disabled:opacity-60"
-                          >
-                            {isMarkingFailed ? 'Updating...' : 'Mark Failed'}
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleMarkPaymentFailed(selectedOrder.id)}
+                              disabled={isMarkingFailed}
+                              className="px-2.5 py-1 bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-500/40 rounded-lg text-[10px] font-bold cursor-pointer disabled:opacity-60"
+                            >
+                              {isMarkingFailed ? 'Updating...' : 'Mark Failed'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUnpaidOrder(selectedOrder.id)}
+                              disabled={isDeletingUnpaid}
+                              className="px-2.5 py-1 bg-[#121110] hover:bg-red-950 text-[#E8DFD1] border border-white/15 rounded-lg text-[10px] font-bold cursor-pointer disabled:opacity-60 flex items-center gap-1"
+                              title="Remove non-paying visitor"
+                            >
+                              <Trash2 className="w-3 h-3 text-red-300" />
+                              <span>{isDeletingUnpaid ? '...' : 'Dismiss'}</span>
+                            </button>
+                          </div>
                         </div>
                         <div className="text-[11px] text-amber-200/85 leading-relaxed">
-                          Received <strong>₹{selectedOrder.total}</strong> on <strong>{USER_UPI_ID}</strong>? Tap below to check out the customer&apos;s page automatically and unlock their Thank You message right away.
+                          Received <strong>₹{selectedOrder.total}</strong> on <strong>{USER_UPI_ID}</strong>? Only you can confirm this order — tap below once you receive the money.
                         </div>
 
-                        <form
-                          onSubmit={e => handleVerifyUpiPayment(e, selectedOrder.id)}
-                          className="space-y-2 pt-0.5"
+                        <button
+                          type="button"
+                          onClick={() => handleVerifyUpiPayment(selectedOrder.id)}
+                          disabled={isVerifyingUtr}
+                          className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-colors cursor-pointer disabled:opacity-60 shadow-md flex items-center justify-center gap-2"
                         >
-                          <button
-                            type="submit"
-                            disabled={isVerifyingUtr}
-                            className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-colors cursor-pointer disabled:opacity-60 shadow-md flex items-center justify-center gap-2"
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>
-                              {isVerifyingUtr
-                                ? 'Confirming & Checking Out Customer...'
-                                : `I Received ₹${selectedOrder.total} — Confirm & Check Out Customer`}
-                            </span>
-                          </button>
-
-                          <input
-                            type="text"
-                            value={verifyUtrInput}
-                            onChange={e => setVerifyUtrInput(e.target.value)}
-                            placeholder="Optional: Paste UPI UTR / Ref ID (or leave blank for instant 1-tap)"
-                            className="w-full px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-[11px] font-mono text-white placeholder-[#8A7463] outline-none focus:border-[#C5A880]"
-                          />
-                        </form>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>
+                            {isVerifyingUtr
+                              ? 'Confirming Order...'
+                              : `I Received ₹${selectedOrder.total} — Confirm Order`}
+                          </span>
+                        </button>
                       </div>
                     )}
 
@@ -1265,45 +1268,39 @@ export const AdminDispatchModal: React.FC = () => {
                       <div><strong>Order Timestamp:</strong> {new Date(selectedOrder.createdAt).toLocaleString('en-IN')}</div>
                     </div>
 
-                    {/* Dual WhatsApp Messages: To Customer (Them) + To Store Owner (Me) */}
-                    <div className={`space-y-2 ${justVerifiedOrderId === selectedOrder.id ? 'p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/50 shadow-lg' : ''}`}>
-                      {justVerifiedOrderId === selectedOrder.id && selectedOrder.paymentStatus === 'PAID' && (
-                        <div className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5 pb-1">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span>Payment Confirmed! Send messages to Customer &amp; Yourself below:</span>
-                        </div>
-                      )}
-                      {selectedOrder.paymentStatus === 'PAID' ? (
-                        <a
-                          href={`https://wa.me/${getCleanPhone(selectedOrder.customerPhone)}?text=${encodeURIComponent(
-                            getCustomerThankYouMessage(selectedOrder)
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="w-full py-2.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white text-xs font-bold uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
-                        >
-                          <Send className="w-4 h-4" />
-                          <span>Send Thank You Message to Customer ({selectedOrder.customerPhone})</span>
-                        </a>
-                      ) : (
-                        <div className="w-full py-2.5 px-3 bg-[#1A1816] text-[#8A7463] border border-white/10 text-[11px] font-medium rounded-xl flex items-center justify-center gap-2 text-center">
-                          <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          <span>Customer Thank You WhatsApp unlocks once UPI payment is verified as PAID.</span>
-                        </div>
-                      )}
+                    {/* One-time WhatsApp prompt shown ONLY right while confirming an order */}
+                    {justVerifiedOrderId === selectedOrder.id &&
+                      selectedOrder.paymentStatus === 'PAID' &&
+                      !whatsappPromptDoneIds.includes(selectedOrder.id) && (
+                        <div className="p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/50 shadow-lg space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>Order Confirmed &amp; Saved! Send WhatsApp details (one-time):</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => markWhatsappPromptDone(selectedOrder.id)}
+                              className="text-[10px] font-bold text-[#8A7463] hover:text-white px-2 py-0.5 rounded border border-white/10 cursor-pointer shrink-0"
+                            >
+                              Done
+                            </button>
+                          </div>
 
-                      <a
-                        href={`https://wa.me/${getCleanPhone(ADMIN_PHONE)}?text=${encodeURIComponent(
-                          getOwnerOrderDetailsMessage(selectedOrder)
-                        )}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full py-2.5 bg-[#121110] hover:bg-[#2A2622] text-[#C5A880] border border-[#C5A880]/40 text-xs font-bold uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Send Full Order Details to My Number ({ADMIN_PHONE})</span>
-                      </a>
-                    </div>
+                          <a
+                            href={`https://wa.me/${getCleanPhone(selectedOrder.customerPhone)}?text=${encodeURIComponent(
+                              getCustomerThankYouMessage(selectedOrder)
+                            )}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={() => markWhatsappPromptDone(selectedOrder.id)}
+                            className="w-full py-2.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white text-xs font-bold uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                          >
+                            <Send className="w-4 h-4" />
+                            <span>Send Thank You Message to Customer ({selectedOrder.customerPhone})</span>
+                          </a>
+                        </div>
+                      )}
 
                     {/* Items list */}
                     <div>
@@ -1362,8 +1359,17 @@ export const AdminDispatchModal: React.FC = () => {
 
                   </div>
                 ) : (
-                  <div className="text-center py-14 text-xs text-[#8A7463]">
-                    Select an order to inspect customer phone, UPI verification, and delivery status.
+                  <div className="text-center py-14 text-xs text-[#8A7463] space-y-2">
+                    <div className="font-semibold text-[#E8DFD1]">
+                      {statusFilter === 'PAID'
+                        ? 'Showing Paid Customers Only'
+                        : 'No order selected'}
+                    </div>
+                    <div className="max-w-sm mx-auto leading-relaxed">
+                      {statusFilter === 'PAID'
+                        ? 'Select a verified paid customer on the left to view full delivery details and send Thank You WhatsApp updates. Non-paying visitors are hidden.'
+                        : 'Select an order to inspect customer phone, UPI verification, and delivery status.'}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1379,11 +1385,32 @@ export const AdminDispatchModal: React.FC = () => {
                     <span>Per-Order Sales &amp; Totals Breakdown</span>
                   </h4>
                   <p className="text-[11px] text-[#8A7463] mt-0.5">
-                    Every order&apos;s subtotal, shipping, grand total, payment status, and cumulative sales summary. Tap any row to inspect.
+                    {statusFilter === 'PAID'
+                      ? 'Showing verified PAID customers only. Tap any row to inspect.'
+                      : 'Filtered orders breakdown and cumulative sales summary. Tap any row to inspect.'}
                   </p>
                 </div>
-                <div className="text-xs font-mono text-[#C5A880] bg-[#121110] px-3 py-1.5 rounded-xl border border-[#C5A880]/30 self-start sm:self-auto">
-                  Showing {filteredOrders.length} of {orders.length} Orders
+                <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                  {filteredOrders.length > 0 && (
+                    <a
+                      href={`https://wa.me/${getCleanPhone(ADMIN_PHONE)}?text=${encodeURIComponent(
+                        getAllOrdersSummaryMessage(filteredOrders)
+                      )}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-1.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white text-[11px] font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>
+                        {statusFilter === 'PAID' ? 'Forward Paid Customers to WhatsApp' : 'Forward Listed Orders to WhatsApp'}
+                      </span>
+                    </a>
+                  )}
+                  <div className="text-xs font-mono text-[#C5A880] bg-[#121110] px-3 py-1.5 rounded-xl border border-[#C5A880]/30">
+                    {statusFilter === 'PAID'
+                      ? `${filteredOrders.length} Paid Customer${filteredOrders.length === 1 ? '' : 's'}`
+                      : `Showing ${filteredOrders.length} Orders`}
+                  </div>
                 </div>
               </div>
 
@@ -1406,14 +1433,16 @@ export const AdminDispatchModal: React.FC = () => {
                     {filteredOrders.length === 0 ? (
                       <tr>
                         <td colSpan={9} className="py-8 text-center text-xs text-[#8A7463]">
-                          No orders match the current filter.
+                          {statusFilter === 'PAID'
+                            ? 'No verified PAID customers in this view — non-paying visitors are hidden.'
+                            : 'No orders match the current filter.'}
                         </td>
                       </tr>
                     ) : (
                       filteredOrders.map(ord => (
                         <tr
                           key={`ledger-${ord.id}`}
-                          onClick={() => setSelectedOrderId(ord.id)}
+                          onClick={() => handleSelectOrder(ord.id)}
                           className={`cursor-pointer transition-colors ${
                             selectedOrder?.id === ord.id ? 'bg-[#C5A880]/10' : 'hover:bg-white/5'
                           }`}
@@ -1469,12 +1498,12 @@ export const AdminDispatchModal: React.FC = () => {
                 </table>
               </div>
 
-              {/* Cumulative Totals Summary Bar */}
+              {/* Cumulative Totals Summary Bar (Paid-Only Metrics) */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1 text-xs">
                 <div className="bg-[#121110] p-3 rounded-xl border border-white/10">
-                  <div className="text-[10px] uppercase tracking-wider text-[#8A7463]">Total Orders</div>
+                  <div className="text-[10px] uppercase tracking-wider text-[#8A7463]">Paid Customers</div>
                   <div className="font-serif text-lg font-bold text-white mt-0.5 tabular-nums">
-                    {orders.length}
+                    {analytics.successfulPaymentsCount}
                   </div>
                 </div>
                 <div className="bg-[#121110] p-3 rounded-xl border border-emerald-500/30">
@@ -1483,22 +1512,22 @@ export const AdminDispatchModal: React.FC = () => {
                     ₹{analytics.totalSales.toLocaleString('en-IN')}
                   </div>
                 </div>
-                <div className="bg-[#121110] p-3 rounded-xl border border-amber-500/30">
-                  <div className="text-[10px] uppercase tracking-wider text-amber-400">Pending Orders Total</div>
-                  <div className="font-serif text-lg font-bold text-amber-300 mt-0.5 tabular-nums">
-                    ₹{analytics.pendingOrdersAmount.toLocaleString('en-IN')}
+                <div className="bg-[#121110] p-3 rounded-xl border border-[#C5A880]/30">
+                  <div className="text-[10px] uppercase tracking-wider text-[#C5A880]">Confirmed / Packing</div>
+                  <div className="font-serif text-lg font-bold text-white mt-0.5 tabular-nums">
+                    {analytics.deliveryStatusBreakdown.CONFIRMED}
                   </div>
                 </div>
-                <div className="bg-[#121110] p-3 rounded-xl border border-red-500/30">
-                  <div className="text-[10px] uppercase tracking-wider text-red-400">Failed Orders Total</div>
-                  <div className="font-serif text-lg font-bold text-red-300 mt-0.5 tabular-nums">
-                    ₹{analytics.failedPaymentsAmount.toLocaleString('en-IN')}
+                <div className="bg-[#121110] p-3 rounded-xl border border-blue-500/30">
+                  <div className="text-[10px] uppercase tracking-wider text-blue-300">In Transit</div>
+                  <div className="font-serif text-lg font-bold text-blue-200 mt-0.5 tabular-nums">
+                    {analytics.deliveryStatusBreakdown.DISPATCHED + analytics.deliveryStatusBreakdown.OUT_FOR_DELIVERY}
                   </div>
                 </div>
-                <div className="bg-[#121110] p-3 rounded-xl border border-[#C5A880]/40 col-span-2 sm:col-span-1">
-                  <div className="text-[10px] uppercase tracking-wider text-[#C5A880]">Gross Order Value</div>
+                <div className="bg-[#121110] p-3 rounded-xl border border-white/15 col-span-2 sm:col-span-1">
+                  <div className="text-[10px] uppercase tracking-wider text-[#E8DFD1]">Delivered</div>
                   <div className="font-serif text-lg font-bold text-[#C5A880] mt-0.5 tabular-nums">
-                    ₹{orders.reduce((sum, o) => sum + o.total, 0).toLocaleString('en-IN')}
+                    {analytics.deliveryStatusBreakdown.DELIVERED}
                   </div>
                 </div>
               </div>
@@ -1713,11 +1742,11 @@ export const AdminDispatchModal: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#C5A880]" />
                 <h4 className="font-serif text-base font-bold text-white">
-                  Hands-Free Auto-Checkout from Google Pay / Bank Notifications
+                  Founder-Only Order Confirmation (Optional GPay Alert Bridge)
                 </h4>
               </div>
               <p className="text-xs text-[#E8DFD1]/80 leading-relaxed">
-                Because personal UPI IDs (<code className="font-mono text-[#C5A880]">{USER_UPI_ID}</code>) go directly to your bank without a gateway, you can either tap <strong>&ldquo;I Received ₹... — Confirm &amp; Check Out Customer&rdquo;</strong> in your Orders tab, OR link an Android notification forwarder (like MacroDroid / SMS Forwarder) to automatically check out matching orders the moment Google Pay notifies your phone:
+                Orders are confirmed <strong>only when you tap &ldquo;I Received ₹... — Confirm Order&rdquo;</strong> inside this Founder Panel. If you link an Android notification forwarder (like MacroDroid) to the endpoint below, it will highlight incoming GPay payments under <strong>Awaiting Confirmation</strong> for your final approval:
               </p>
               <div className="bg-[#121110] p-3.5 rounded-xl border border-white/10 font-mono text-[11px] text-[#E8DFD1] space-y-1.5 overflow-x-auto">
                 <div>

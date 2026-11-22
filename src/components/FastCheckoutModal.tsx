@@ -28,10 +28,6 @@ import {
 } from '../data/products';
 import { lookupPincode } from '../data/pincodes';
 import { Order } from '../types';
-import {
-  persistPendingOrderToFirestore,
-  subscribeToPublicOrderStatus
-} from '../firebase';
 
 export const FastCheckoutModal: React.FC = () => {
   const {
@@ -86,7 +82,7 @@ export const FastCheckoutModal: React.FC = () => {
     }
   }, [grandTotal, upiDeepLink]);
 
-  // Listen to Firebase Firestore public status in real time, local context updates, AND poll server when available.
+  // Listen to local context updates and poll Express server status every 2 seconds.
   // Thank You confirmation ONLY unlocks once paymentStatus === 'PAID'.
   useEffect(() => {
     if (!isCheckoutOpen || checkoutStep !== 2 || !pendingOrder?.id || completedOrder) return;
@@ -102,27 +98,6 @@ export const FastCheckoutModal: React.FC = () => {
         matchInContext.paymentFailureReason || 'Payment was not received or was declined. Please retry UPI payment.'
       );
     }
-
-    const unsubFirestore = subscribeToPublicOrderStatus(pendingOrder.id, statusSnap => {
-      if (statusSnap.paymentStatus === 'PAID') {
-        const confirmed: Order = {
-          ...pendingOrder,
-          paymentStatus: 'PAID',
-          orderStatus: statusSnap.orderStatus || 'CONFIRMED',
-          gatewayTransactionId: statusSnap.gatewayTransactionId || pendingOrder.gatewayTransactionId,
-          trackingNumber: statusSnap.trackingNumber || pendingOrder.trackingNumber,
-          paymentVerifiedAt: new Date().toISOString(),
-          paymentFailureReason: undefined,
-        };
-        upsertOrder(confirmed);
-        setCompletedOrder(confirmed);
-        setPendingOrder(null);
-      } else if (statusSnap.paymentStatus === 'FAILED') {
-        setPaymentError(
-          statusSnap.paymentFailureReason || 'Payment was not received or was declined. Please retry UPI payment.'
-        );
-      }
-    });
 
     const interval = setInterval(async () => {
       try {
@@ -140,12 +115,11 @@ export const FastCheckoutModal: React.FC = () => {
           );
         }
       } catch {
-        // ignore static/Vercel or transient network poll error
+        // ignore transient network poll error
       }
     }, 2000);
 
     return () => {
-      unsubFirestore();
       clearInterval(interval);
     };
   }, [isCheckoutOpen, checkoutStep, pendingOrder, completedOrder, orders, upsertOrder]);
@@ -256,7 +230,8 @@ export const FastCheckoutModal: React.FC = () => {
             subtotal,
             discount: 0,
             shipping: shippingFee,
-            total: grandTotal
+            total: grandTotal,
+            existingOrderId: pendingOrder?.id
           })
         });
         const contentType = res.headers.get('content-type') || '';
@@ -282,18 +257,6 @@ export const FastCheckoutModal: React.FC = () => {
         createdOrder = buildClientFallbackOrder();
       }
 
-      try {
-        await persistPendingOrderToFirestore(createdOrder);
-      } catch (firstErr) {
-        try {
-          await new Promise(resolve => setTimeout(resolve, 400));
-          await persistPendingOrderToFirestore(createdOrder);
-        } catch (secondErr) {
-          console.warn('Firestore order backup notice:', firstErr, secondErr);
-        }
-      }
-
-      upsertOrder(createdOrder);
       setPendingOrder(createdOrder);
       setCheckoutStep(2);
     } catch {
@@ -303,12 +266,32 @@ export const FastCheckoutModal: React.FC = () => {
     }
   };
 
+  const markPaymentInitiated = async () => {
+    if (!pendingOrder) return;
+    const updatedOrder: Order = {
+      ...pendingOrder,
+      paymentInitiated: true,
+    };
+    setPendingOrder(updatedOrder);
+    upsertOrder(updatedOrder);
+
+    try {
+      await fetch(`/api/orders/${encodeURIComponent(pendingOrder.id)}/payment-initiated`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+    } catch {
+      // ignore transient network error
+    }
+  };
+
   const buildCustomerThankYouReceipt = (order: Order) => {
     const itemsList = order.items
       .map(it => `• ${it.quantity}x ${it.productName} (${it.variantLabel}) - ₹${it.price * it.quantity}`)
       .join('\n');
 
-    return `✨ THANK YOU FOR YOUR HAIROLOGY ORDER! ✨\n\nDear ${order.deliveryAddress.recipientName},\nThank you for shopping with HAIROLOGY Haute-Beauté Haircare! Your UPI payment of ₹${order.total} has been confirmed.\n\n📦 ORDER SUMMARY:\n• Order ID: #${order.id}\n• UPI Transaction Ref: ${order.gatewayTransactionId || 'Verified'}\n• Amount Paid: ₹${order.total} (PAID)\n• Date: ${new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}\n\n🛍️ ITEMS ORDERED:\n${itemsList}\n\n📍 DELIVERY ADDRESS:\n${order.deliveryAddress.recipientName}\n${order.deliveryAddress.streetAddress}, ${order.deliveryAddress.city} - ${order.deliveryAddress.pincode} (${order.deliveryAddress.state})\nMobile: ${order.customerPhone}\n\n🚚 DISPATCH & TRACKING:\n• Courier Partner: Delhivery Express\n• AWB Tracking: ${order.trackingNumber}\n• Delivery Window: 2-4 business days across India\n\nHairology team personally packing your order.\n\nThank you for choosing Hairology! 🌿`;
+    return `✨ THANK YOU FOR YOUR HAIROLOGY ORDER! ✨\n\nDear ${order.deliveryAddress.recipientName},\nThank you for shopping with HAIROLOGY Haute-Beauté Haircare! Your UPI payment of ₹${order.total} has been confirmed.\n\n📦 ORDER SUMMARY:\n• Order ID: #${order.id}\n• Amount Paid: ₹${order.total} (PAID)\n• Date: ${new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}\n\n🛍️ ITEMS ORDERED:\n${itemsList}\n\n📍 DELIVERY ADDRESS:\n${order.deliveryAddress.recipientName}\n${order.deliveryAddress.streetAddress}, ${order.deliveryAddress.city} - ${order.deliveryAddress.pincode} (${order.deliveryAddress.state})\nMobile: ${order.customerPhone}\n\n🚚 DISPATCH & TRACKING:\n• Courier Partner: Delhivery Express\n• AWB Tracking: ${order.trackingNumber}\n• Delivery Window: 2-4 business days across India\n\nHairology team personally packing your order.\n\nThank you for choosing Hairology! 🌿`;
   };
 
   const handleModalClose = () => {
@@ -412,7 +395,7 @@ export const FastCheckoutModal: React.FC = () => {
               <div>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-mono font-bold uppercase tracking-wider mb-2">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  UPI PAYMENT CONFIRMED: {completedOrder.gatewayTransactionId || 'VERIFIED'}
+                  PAYMENT CONFIRMED BY HAIROLOGY
                 </span>
                 <h3 className="font-serif text-2xl sm:text-3xl font-bold text-[#121110] mt-1">
                   Thank You, Your Order is Confirmed!
@@ -754,6 +737,7 @@ export const FastCheckoutModal: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                   <a
                     href={upiDeepLink}
+                    onClick={() => void markPaymentInitiated()}
                     className="py-2.5 px-3 bg-[#121110] hover:bg-[#2A2724] text-[#C5A880] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow cursor-pointer"
                   >
                     <Smartphone className="w-3.5 h-3.5" />
@@ -761,20 +745,23 @@ export const FastCheckoutModal: React.FC = () => {
                   </a>
                   <a
                     href={gpayDeepLink}
+                    onClick={() => void markPaymentInitiated()}
                     className="py-2.5 px-3 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-[#E8DFD1]"
                   >
                     <span>Google Pay (₹{grandTotal})</span>
                   </a>
                   <a
                     href={phonepeDeepLink}
+                    onClick={() => void markPaymentInitiated()}
                     className="py-2.5 px-3 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-[#E8DFD1]"
                   >
                     <span>PhonePe (₹{grandTotal})</span>
                   </a>
                 </div>
+
               </div>
 
-              {/* Awaiting Real Payment Verification Notice (Zero self-confirm checkbox) */}
+              {/* Awaiting Founder Confirmation Notice (No self-claim or auto-confirm) */}
               {paymentError ? (
                 <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-2xl flex items-start gap-2.5 font-medium">
                   <XCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
@@ -785,16 +772,17 @@ export const FastCheckoutModal: React.FC = () => {
                   <Clock className="w-5 h-5 text-[#C5A880] shrink-0 mt-0.5 animate-pulse" />
                   <div className="text-xs space-y-2 flex-1">
                     <div className="font-bold text-[#C5A880]">
-                      Waiting to Receive Payment for Order #{pendingOrder?.id} (₹{grandTotal})
+                      Scan &amp; Pay ₹{grandTotal} for Order #{pendingOrder?.id}
                     </div>
                     <p className="text-[11px] text-[#E8DFD1]/85 leading-relaxed">
-                      Please stay on this page after paying. As soon as your payment is confirmed, this page will check out automatically and display your Thank You message.
+                      Scan the QR code or use a UPI app above to complete payment. Your order will be confirmed only after Hairology verifies that your payment has been received.
                     </p>
                     {pendingOrder && (
                       <a
                         href={`https://wa.me/${ADMIN_PHONE.replace(/\D/g, '')}?text=${encodeURIComponent(
-                          `Hi Hairology! I have placed Order #${pendingOrder.id} for ₹${grandTotal} (${recipientName}, +91 ${getCustomerPhoneDigits(phone)}). Please confirm my UPI payment.`
+                          `Hi Hairology! I have paid ₹${grandTotal} for Order #${pendingOrder.id} (${recipientName}, +91 ${getCustomerPhoneDigits(phone)}). Please confirm my order.`
                         )}`}
+                        onClick={() => void markPaymentInitiated()}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold text-[11px] rounded-lg transition-colors"

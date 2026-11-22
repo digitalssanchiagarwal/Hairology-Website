@@ -32,6 +32,7 @@ const OWNER_WHATSAPP_DIGITS = (process.env.OWNER_WHATSAPP_NUMBER || '91810455970
 
 const DATA_DIR = path.resolve(process.cwd(), '.data');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const ORDERS_BACKUP_FILE = path.join(DATA_DIR, 'orders.backup.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'founder_config.json');
 
 interface FounderConfig {
@@ -47,13 +48,50 @@ function ensureDataDir(): void {
 function readOrders(): Order[] {
   try {
     ensureDataDir();
+    let mainOrders: Order[] = [];
+    if (fs.existsSync(ORDERS_FILE)) {
+      const raw = fs.readFileSync(ORDERS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      mainOrders = Array.isArray(parsed) ? parsed : [];
+    }
+
+    if (fs.existsSync(ORDERS_BACKUP_FILE)) {
+      try {
+        const backupRaw = fs.readFileSync(ORDERS_BACKUP_FILE, 'utf-8');
+        const backupParsed = JSON.parse(backupRaw);
+        const backupPaid = Array.isArray(backupParsed)
+          ? (backupParsed as Order[]).filter(o => o && o.paymentStatus === 'PAID')
+          : [];
+        if (backupPaid.length > 0) {
+          const map = new Map<string, Order>();
+          for (const ord of mainOrders) {
+            if (ord && typeof ord.id === 'string') map.set(ord.id, ord);
+          }
+          let restored = false;
+          for (const paidOrd of backupPaid) {
+            const existing = map.get(paidOrd.id);
+            if (!existing || existing.paymentStatus !== 'PAID') {
+              map.set(paidOrd.id, paidOrd);
+              restored = true;
+            }
+          }
+          if (restored) {
+            const merged = Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            fs.writeFileSync(ORDERS_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+            return merged;
+          }
+        }
+      } catch {
+        // ignore backup read error
+      }
+    }
+
     if (!fs.existsSync(ORDERS_FILE)) {
       fs.writeFileSync(ORDERS_FILE, JSON.stringify([], null, 2), 'utf-8');
-      return [];
     }
-    const raw = fs.readFileSync(ORDERS_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return mainOrders;
   } catch (err) {
     console.error('Error reading orders file:', err);
     return [];
@@ -63,7 +101,36 @@ function readOrders(): Order[] {
 function writeOrders(orders: Order[]): void {
   try {
     ensureDataDir();
-    fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf-8');
+    const tempFile = `${ORDERS_FILE}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(orders, null, 2), 'utf-8');
+    fs.renameSync(tempFile, ORDERS_FILE);
+
+    const paidOrders = orders.filter(o => o && o.paymentStatus === 'PAID');
+    if (paidOrders.length > 0) {
+      let existingBackup: Order[] = [];
+      if (fs.existsSync(ORDERS_BACKUP_FILE)) {
+        try {
+          const rawB = fs.readFileSync(ORDERS_BACKUP_FILE, 'utf-8');
+          const parsedB = JSON.parse(rawB);
+          if (Array.isArray(parsedB)) existingBackup = parsedB as Order[];
+        } catch {
+          // ignore
+        }
+      }
+      const backupMap = new Map<string, Order>();
+      for (const ord of [...existingBackup, ...paidOrders]) {
+        if (ord && typeof ord.id === 'string' && ord.paymentStatus === 'PAID') {
+          backupMap.set(ord.id, ord);
+        }
+      }
+      const backupTemp = `${ORDERS_BACKUP_FILE}.tmp`;
+      fs.writeFileSync(
+        backupTemp,
+        JSON.stringify(Array.from(backupMap.values()), null, 2),
+        'utf-8'
+      );
+      fs.renameSync(backupTemp, ORDERS_BACKUP_FILE);
+    }
   } catch (err) {
     console.error('Error writing orders file:', err);
   }
@@ -101,7 +168,7 @@ function buildOwnerOrderAlertMessage(order: Order): string {
     timeStyle: 'short',
   });
 
-  return `🛍️ NEW HAIROLOGY ORDER (#${order.id})\n📅 Date: ${formattedDate}\n\n👤 WHO ORDERED:\n• Name: ${order.deliveryAddress.recipientName}\n• Phone: ${order.customerPhone}\n\n📍 FULL DELIVERY ADDRESS:\n${order.deliveryAddress.streetAddress}\n${order.deliveryAddress.city}, ${order.deliveryAddress.state} - ${order.deliveryAddress.pincode}\n\n📦 WHAT WAS ORDERED:\n${itemsList}\n\n💰 BILLING & PAYMENT:\n• Subtotal: ₹${order.subtotal}${order.discount > 0 ? `\n• Discount${order.couponApplied ? ` (${order.couponApplied})` : ''}: -₹${order.discount}` : ''}\n• Shipping: ${order.shipping === 0 ? 'FREE' : `₹${order.shipping}`}\n• Grand Total: ₹${order.total}\n• Payment Status: ${order.paymentStatus}${order.gatewayTransactionId ? ` (UTR: ${order.gatewayTransactionId})` : ''}\n• UPI ID: ${CONNECTED_UPI_ID}\n• Order Status: ${order.orderStatus.replace(/_/g, ' ')}\n• AWB Tracking: ${order.trackingNumber || 'Pending'}`;
+  return `🛍️ NEW HAIROLOGY ORDER (#${order.id})\n📅 Date: ${formattedDate}\n\n👤 WHO ORDERED:\n• Name: ${order.deliveryAddress.recipientName}\n• Phone: ${order.customerPhone}\n\n📍 FULL DELIVERY ADDRESS:\n${order.deliveryAddress.streetAddress}\n${order.deliveryAddress.city}, ${order.deliveryAddress.state} - ${order.deliveryAddress.pincode}\n\n📦 WHAT WAS ORDERED:\n${itemsList}\n\n💰 BILLING & PAYMENT:\n• Subtotal: ₹${order.subtotal}${order.discount > 0 ? `\n• Discount${order.couponApplied ? ` (${order.couponApplied})` : ''}: -₹${order.discount}` : ''}\n• Shipping: ${order.shipping === 0 ? 'FREE' : `₹${order.shipping}`}\n• Grand Total: ₹${order.total}\n• Payment Status: ${order.paymentStatus}\n• UPI ID: ${CONNECTED_UPI_ID}\n• Order Status: ${order.orderStatus.replace(/_/g, ' ')}\n• AWB Tracking: ${order.trackingNumber || 'Pending'}`;
 }
 
 function getOwnerWhatsAppUrl(order: Order): string {
@@ -114,7 +181,7 @@ function buildCustomerThankYouMessage(order: Order): string {
     .map(it => `• ${it.quantity}x ${it.productName} (${it.variantLabel}) - ₹${it.price * it.quantity}`)
     .join('\n');
 
-  return `✨ THANK YOU FOR YOUR HAIROLOGY ORDER! ✨\n\nDear ${order.deliveryAddress.recipientName},\nThank you for shopping with HAIROLOGY Haute-Beauté Haircare! Your UPI payment of ₹${order.total} has been confirmed.\n\n📦 ORDER SUMMARY:\n• Order ID: #${order.id}\n• UPI Transaction Ref: ${order.gatewayTransactionId || 'Verified'}\n• Amount Paid: ₹${order.total} (PAID)\n• Date: ${new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}\n\n🛍️ ITEMS ORDERED:\n${itemsList}\n\n📍 DELIVERY ADDRESS:\n${order.deliveryAddress.recipientName}\n${order.deliveryAddress.streetAddress}, ${order.deliveryAddress.city} - ${order.deliveryAddress.pincode} (${order.deliveryAddress.state})\nMobile: ${order.customerPhone}\n\n🚚 DISPATCH & TRACKING:\n• Courier Partner: Delhivery Express\n• AWB Tracking: ${order.trackingNumber}\n• Delivery Window: 2-4 business days across India\n\nHairology team personally packing your order.\n\nThank you for choosing Hairology! 🌿`;
+  return `✨ THANK YOU FOR YOUR HAIROLOGY ORDER! ✨\n\nDear ${order.deliveryAddress.recipientName},\nThank you for shopping with HAIROLOGY Haute-Beauté Haircare! Your UPI payment of ₹${order.total} has been confirmed.\n\n📦 ORDER SUMMARY:\n• Order ID: #${order.id}\n• Amount Paid: ₹${order.total} (PAID)\n• Date: ${new Date(order.createdAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}\n\n🛍️ ITEMS ORDERED:\n${itemsList}\n\n📍 DELIVERY ADDRESS:\n${order.deliveryAddress.recipientName}\n${order.deliveryAddress.streetAddress}, ${order.deliveryAddress.city} - ${order.deliveryAddress.pincode} (${order.deliveryAddress.state})\nMobile: ${order.customerPhone}\n\n🚚 DISPATCH & TRACKING:\n• Courier Partner: Delhivery Express\n• AWB Tracking: ${order.trackingNumber}\n• Delivery Window: 2-4 business days across India\n\nHairology team personally packing your order.\n\nThank you for choosing Hairology! 🌿`;
 }
 
 async function dispatchOwnerOrderNotification(order: Order): Promise<void> {
@@ -420,11 +487,11 @@ async function createApp() {
         paymentStatus: 'PENDING',
         orderStatus: 'PENDING_CONFIRMATION',
         payerUpi: CONNECTED_UPI_ID,
+        paymentInitiated: false,
         trackingNumber: `DELHIVERY-AWB-${Math.floor(100000000 + Math.random() * 900000000)}`,
       };
 
       writeOrders([newOrder, ...orders]);
-      void dispatchOwnerOrderNotification(newOrder);
       const upiAmountParam = total > 2000 ? '' : `&am=${total.toFixed(2)}`;
       const upiDeepLink = `upi://pay?pa=${encodeURIComponent(CONNECTED_UPI_ID)}&pn=${encodeURIComponent(CONNECTED_UPI_NAME)}${upiAmountParam}&cu=INR&tn=${encodeURIComponent(`Hairology #${orderId}`)}`;
 
@@ -468,19 +535,82 @@ async function createApp() {
     });
   });
 
+  // Customer notifies that they tapped a UPI app or scanned QR & completed payment (strictly remains PENDING until founder confirms)
+  app.post('/api/orders/:id/payment-initiated', (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const orders = readOrders();
+      const idx = orders.findIndex(o => o.id === orderId);
+      if (idx === -1) {
+        res.status(404).json({ error: 'Order not found.' });
+        return;
+      }
+      orders[idx] = {
+        ...orders[idx],
+        paymentInitiated: true,
+      };
+      writeOrders(orders);
+      res.json({ ok: true, paymentInitiated: true });
+    } catch (err) {
+      console.error('Payment initiated mark error:', err);
+      res.status(500).json({ error: 'Unable to record payment attempt.' });
+    }
+  });
+
   // ================= PROTECTED FOUNDER ORDERS & ANALYTICS ROUTES =================
   app.get('/api/orders', requireFounderAuth, (_req, res) => {
-    const orders = readOrders().sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    const orders = readOrders()
+      .filter(o => o.paymentStatus === 'PAID' || o.paymentInitiated !== false)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const analytics = computeOrderAnalytics(orders);
     res.json({ orders, analytics });
   });
 
   app.post('/api/orders/reset', requireFounderAuth, (_req, res) => {
-    writeOrders([]);
-    const analytics = computeOrderAnalytics([]);
-    res.json({ success: true, orders: [], analytics });
+    const paidOnly = readOrders()
+      .filter(o => o.paymentStatus === 'PAID')
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    writeOrders(paidOnly);
+    const analytics = computeOrderAnalytics(paidOnly);
+    res.json({ success: true, orders: paidOnly, analytics });
+  });
+
+  app.post('/api/orders/sync-cloud', requireFounderAuth, (req, res) => {
+    try {
+      const incomingOrders = Array.isArray(req.body?.orders) ? (req.body.orders as Order[]) : [];
+      const currentOrders = readOrders();
+      const deliveryRank: Record<Order['orderStatus'], number> = {
+        PAYMENT_FAILED: 0,
+        PENDING_CONFIRMATION: 1,
+        CONFIRMED: 2,
+        DISPATCHED: 3,
+        OUT_FOR_DELIVERY: 4,
+        DELIVERED: 5,
+      };
+      const map = new Map<string, Order>();
+      for (const ord of [...incomingOrders, ...currentOrders]) {
+        if (!ord || typeof ord.id !== 'string' || !ord.id) continue;
+        const existing = map.get(ord.id);
+        if (!existing) {
+          map.set(ord.id, ord);
+        } else if (ord.paymentStatus === 'PAID' && existing.paymentStatus !== 'PAID') {
+          map.set(ord.id, ord);
+        } else if (
+          ord.paymentStatus === existing.paymentStatus &&
+          (deliveryRank[ord.orderStatus] || 0) > (deliveryRank[existing.orderStatus] || 0)
+        ) {
+          map.set(ord.id, ord);
+        }
+      }
+      const merged = Array.from(map.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      writeOrders(merged);
+      res.json({ orders: merged, analytics: computeOrderAnalytics(merged) });
+    } catch (err) {
+      console.error('Sync cloud orders error:', err);
+      res.status(500).json({ error: 'Unable to sync cloud orders.' });
+    }
   });
 
   app.post('/api/orders/manual-create', requireFounderAuth, (req, res) => {
@@ -606,20 +736,11 @@ async function createApp() {
     res.json({ order: orders[idx], orders: sorted, analytics: computeOrderAnalytics(sorted) });
   });
 
-  // Founder-only verification of UPI payment received on guddan1102@okhdfcbank (1-tap or with UTR Ref)
+  // Founder-only confirmation of UPI payment received on guddan1102@okhdfcbank (no UTR required)
   app.post('/api/orders/:id/verify-upi', requireFounderAuth, (req, res) => {
     try {
       const orderId = req.params.id;
-      const rawUtr = String(req.body?.utrRef || '').trim();
-
-      if (rawUtr && !/^[A-Za-z0-9_-]{4,64}$/.test(rawUtr)) {
-        res.status(400).json({
-          error: 'Invalid UTR format. Use letters/numbers only or leave blank for 1-tap confirmation.',
-        });
-        return;
-      }
-
-      const utrRef = rawUtr || `UPI-RCVD-${Date.now().toString().slice(-6)}`;
+      const confirmationRef = `FOUNDER-CONFIRMED-${Date.now().toString().slice(-6)}`;
 
       const orders = readOrders();
       const idx = orders.findIndex(o => o.id === orderId);
@@ -632,11 +753,12 @@ async function createApp() {
         ...orders[idx],
         paymentMethod: 'UPI_QR',
         paymentStatus: 'PAID',
+        paymentInitiated: true,
         orderStatus:
           orders[idx].orderStatus === 'PENDING_CONFIRMATION' || orders[idx].orderStatus === 'PAYMENT_FAILED'
             ? 'CONFIRMED'
             : orders[idx].orderStatus,
-        gatewayTransactionId: utrRef,
+        gatewayTransactionId: confirmationRef,
         paymentVerifiedAt: new Date().toISOString(),
         paymentFailureReason: undefined,
       };
@@ -655,11 +777,11 @@ async function createApp() {
       });
     } catch (err) {
       console.error('Verify UPI payment error:', err);
-      res.status(500).json({ error: 'Unable to verify UPI payment.' });
+      res.status(500).json({ error: 'Unable to confirm order.' });
     }
   });
 
-  // Automated Android Google Pay / Bank SMS Notification Webhook -> auto-matches & checks out customer order
+  // Android GPay / Bank Notification Webhook -> surfaces matching pending order in Founder Panel ONLY (never confirms PAID without founder tap)
   app.post('/api/upi/auto-confirm-webhook', (req, res) => {
     try {
       const expectedSecret = (process.env.UPI_WEBHOOK_SECRET || getFounderAccessCode()).trim();
@@ -687,15 +809,6 @@ async function createApp() {
         if (ordMatch) orderId = ordMatch[1].toUpperCase();
       }
 
-      let utrRef = String(req.body?.utr || req.body?.utrRef || '').trim();
-      if (!utrRef && text) {
-        const utrMatch = text.match(/\b(\d{12})\b/);
-        if (utrMatch) utrRef = utrMatch[1];
-      }
-      if (!utrRef) {
-        utrRef = `GPAY-AUTO-${Date.now().toString().slice(-6)}`;
-      }
-
       const orders = readOrders().sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
@@ -708,6 +821,14 @@ async function createApp() {
         targetIdx = orders.findIndex(
           o =>
             o.paymentStatus === 'PENDING' &&
+            o.paymentInitiated === true &&
+            Math.round(Number(o.total)) === Math.round(amount)
+        );
+      }
+      if (targetIdx === -1 && amount > 0) {
+        targetIdx = orders.findIndex(
+          o =>
+            o.paymentStatus === 'PENDING' &&
             Math.round(Number(o.total)) === Math.round(amount)
         );
       }
@@ -715,37 +836,29 @@ async function createApp() {
       if (targetIdx === -1) {
         res.status(404).json({
           matched: false,
-          error: 'No matching pending UPI order found for that order ID or amount.',
+          error: 'No matching pending order found for that order ID or amount.',
         });
         return;
       }
 
+      // Strictly keep paymentStatus PENDING & orderStatus PENDING_CONFIRMATION so ONLY the founder can confirm the order.
       orders[targetIdx] = {
         ...orders[targetIdx],
-        paymentMethod: 'UPI_QR',
-        paymentStatus: 'PAID',
-        orderStatus:
-          orders[targetIdx].orderStatus === 'PENDING_CONFIRMATION' || orders[targetIdx].orderStatus === 'PAYMENT_FAILED'
-            ? 'CONFIRMED'
-            : orders[targetIdx].orderStatus,
-        gatewayTransactionId: utrRef,
-        paymentVerifiedAt: new Date().toISOString(),
-        paymentFailureReason: undefined,
+        paymentInitiated: true,
       };
 
       writeOrders(orders);
-      void dispatchOwnerOrderNotification(orders[targetIdx]);
-      void dispatchCustomerThankYouNotification(orders[targetIdx]);
 
       res.json({
         matched: true,
+        confirmed: false,
+        awaitingFounderConfirmation: true,
         orderId: orders[targetIdx].id,
         total: orders[targetIdx].total,
-        utrRef,
         order: orders[targetIdx],
       });
     } catch (err) {
-      console.error('Auto-confirm UPI webhook error:', err);
+      console.error('UPI webhook error:', err);
       res.status(500).json({ error: 'Failed to process UPI notification webhook.' });
     }
   });
@@ -783,6 +896,56 @@ async function createApp() {
     } catch (err) {
       console.error('Mark payment failed error:', err);
       res.status(500).json({ error: 'Unable to mark order as failed.' });
+    }
+  });
+
+  // Founder-only remove all unpaid/visitor entries while preserving every PAID order
+  app.post('/api/orders/clear-unpaid', requireFounderAuth, (_req, res) => {
+    try {
+      const orders = readOrders();
+      const paidOnly = orders
+        .filter(o => o.paymentStatus === 'PAID')
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const removedCount = orders.length - paidOnly.length;
+      writeOrders(paidOnly);
+      res.json({
+        success: true,
+        removedCount,
+        orders: paidOnly,
+        analytics: computeOrderAnalytics(paidOnly),
+      });
+    } catch (err) {
+      console.error('Clear unpaid orders error:', err);
+      res.status(500).json({ error: 'Unable to clear unpaid entries.' });
+    }
+  });
+
+  // Founder-only delete a single unpaid/abandoned visitor row
+  app.delete('/api/orders/:id', requireFounderAuth, (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const orders = readOrders();
+      const target = orders.find(o => o.id === orderId);
+      if (!target) {
+        res.status(404).json({ error: 'Order not found.' });
+        return;
+      }
+      if (target.paymentStatus === 'PAID') {
+        res.status(400).json({ error: 'Safety block: Cannot delete a verified PAID customer order.' });
+        return;
+      }
+      const remaining = orders
+        .filter(o => o.id !== orderId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      writeOrders(remaining);
+      res.json({
+        success: true,
+        orders: remaining,
+        analytics: computeOrderAnalytics(remaining),
+      });
+    } catch (err) {
+      console.error('Delete unpaid order error:', err);
+      res.status(500).json({ error: 'Unable to delete unpaid entry.' });
     }
   });
 
