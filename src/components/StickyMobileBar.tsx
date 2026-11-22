@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingBag, Sparkles } from 'lucide-react';
+import { ShoppingBag } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export const StickyMobileBar: React.FC = () => {
@@ -12,17 +12,17 @@ export const StickyMobileBar: React.FC = () => {
       <div className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-[#FDFBF7]/95 backdrop-blur-md border-t border-[#E8DFD1] p-3 flex items-center justify-between gap-3 shadow-2xl">
         <div className="flex flex-col">
           <span className="text-[10px] uppercase tracking-wider text-[#8A7463] font-bold">
-            The Hairology Duo
+            The Hairology Trio
           </span>
           <div className="flex items-baseline gap-1.5">
-            <span className="font-serif text-lg font-bold text-[#121110]">₹849</span>
-            <span className="text-xs line-through text-[#8A7463]">₹999</span>
+            <span className="font-serif text-lg font-bold text-[#121110]">₹1299</span>
+            <span className="text-xs line-through text-[#8A7463]">₹1599</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => addItem('the-duo', 'duo-full', 1)}
+            onClick={() => addItem('the-trio', 'trio-full', 1)}
             className="px-4 py-2.5 bg-[#121110] text-[#C5A880] text-xs font-bold tracking-wider uppercase rounded-xl shadow cursor-pointer"
           >
             Add To Bag

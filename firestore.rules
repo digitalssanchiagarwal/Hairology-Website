@@ -121,14 +121,16 @@ service cloud.firestore {
       allow get: if isValidId(orderId) && isAdmin();
       allow list: if isAdmin();
 
-      // Atomic creation requires matching public status mirror in the same batch, strictly PENDING
+      // Atomic creation requires matching public status mirror in the same batch; customers strictly PENDING, admin may log PAID orders
       allow create: if isValidId(orderId) &&
         isValidOrder(incoming(), orderId) &&
-        incoming().paymentStatus == 'PENDING' &&
-        incoming().orderStatus == 'PENDING_CONFIRMATION' &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
-        existsAfter(/databases/$(database)/documents/orderStatuses/$(orderId));
+        existsAfter(/databases/$(database)/documents/orderStatuses/$(orderId)) &&
+        (
+          (incoming().paymentStatus == 'PENDING' && incoming().orderStatus == 'PENDING_CONFIRMATION') ||
+          (isAdmin() && incoming().paymentStatus in ['PENDING', 'PAID'] && incoming().orderStatus in ['PENDING_CONFIRMATION', 'CONFIRMED'])
+        );
 
       allow update: if isValidId(orderId) &&
         isAdmin() &&
@@ -181,11 +183,13 @@ service cloud.firestore {
 
       allow create: if isValidId(orderId) &&
         isValidOrderStatusPublic(incoming(), orderId) &&
-        incoming().paymentStatus == 'PENDING' &&
-        incoming().orderStatus == 'PENDING_CONFIRMATION' &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
-        existsAfter(/databases/$(database)/documents/orders/$(orderId));
+        existsAfter(/databases/$(database)/documents/orders/$(orderId)) &&
+        (
+          (incoming().paymentStatus == 'PENDING' && incoming().orderStatus == 'PENDING_CONFIRMATION') ||
+          (isAdmin() && incoming().paymentStatus in ['PENDING', 'PAID'] && incoming().orderStatus in ['PENDING_CONFIRMATION', 'CONFIRMED'])
+        );
 
       allow update: if isValidId(orderId) &&
         isAdmin() &&

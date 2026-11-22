@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Sparkles, ChevronLeft, ChevronRight, ChevronDown, ShieldCheck, Flame } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCart } from '../context/CartContext';
-import { PRODUCT_IMAGE_TRIO_PORTRAIT, PRODUCT_IMAGE_HOT_WATER_STANDALONE } from '../data/products';
+
+const TRIO_HERO_POSTER = '/assets/aistudio/a8633684-7f74-420c-8486-17b7de796697_df2d7af9.jpg';
+const HOT_WATER_HERO_POSTER = '/assets/aistudio/IMG_4059_afc8ca3d.JPG';
 
 export const HeroSection: React.FC = () => {
   const { addItem } = useCart();
@@ -21,86 +23,33 @@ export const HeroSection: React.FC = () => {
 
   const slides = [
     {
-      id: 'the-duo-slide',
-      kicker: 'HARD-WATER HAIRCARE • MADE FOR INDIA',
-      headline: (
-        <>
-          YOUR{' '}
-          <span className="font-['Cormorant_Garamond',Georgia,serif] italic text-[#E11D48]">
-            newest
-          </span>
-          <br />
-          OBSESSION
-          <br />
-          <span className="font-['Cormorant_Garamond',Georgia,serif] not-italic font-medium text-[#121110]">
-            for hair
-          </span>
-        </>
-      ),
-      description:
-        'Discover a new generation of haircare with innovative shampoo experiences. Formulated specifically to neutralize hard-water heavy metals and reconstruct keratin cuticles against Indian humidity.',
+      id: 'the-trio-slide',
+      theme: 'light' as const,
+      tabLabel: 'The Hairology Trio',
+      posterImage: TRIO_HERO_POSTER,
+      posterAlt: 'Your Newest Obsession for Hair — The Hairology Trio Hard-Water Haircare Made for India',
       primaryCtaText: 'CLAIM THE TRIO OFFER — ₹1299',
       primaryAction: () => addItem('the-trio', 'trio-full', 1),
       secondaryCtaText: 'EXPLORE 7 PRODUCTS',
       secondaryAction: scrollToProducts,
-      highlights: [
-        { text: 'Steam-Activated Chelation', dotColor: 'bg-[#C5A880]' },
-        { text: '72h Anti-Frizz Pea Peptides', dotColor: 'bg-[#C5A880]' },
-        { text: 'Complete 3-Step Indian Regimen', dotColor: 'bg-[#15803D]' },
-      ],
-      image: PRODUCT_IMAGE_TRIO_PORTRAIT,
-      imageAlt: 'The Hairology Trio - Hot Water Shampoo, Protein Shampoo and Rosemary Conditioner',
-      badgeText: 'THE COMPLETE SYSTEM • 3 x 250 ML',
-      badgeIcon: <Sparkles className="w-3.5 h-3.5 fill-[#C5A880] text-[#C5A880]" />,
-      floatingCardTitle: 'The Hairology Trio',
-      floatingCardSubtitle: 'Hot Water + Protein + Rosemary',
-      floatingCardPrice: '₹1299',
-      floatingCardDiscount: '19% OFF • TAP TO VIEW',
-      onCardClick: () => openProductDetail('the-trio'),
-      accentColor: '#E11D48',
+      onPosterClick: () => openProductDetail('the-trio'),
     },
     {
       id: 'hot-water-slide',
-      kicker: 'HARD-WATER HAIRCARE • MADE FOR INDIA',
-      headline: (
-        <>
-          INDIA'S{' '}
-          <span className="font-['Cormorant_Garamond',Georgia,serif] italic text-[#9E3C1B]">
-            first ever
-          </span>
-          <br />
-          HOT WATER
-          <br />
-          <span className="font-['Cormorant_Garamond',Georgia,serif] not-italic font-medium text-[#121110]">
-            shampoo
-          </span>
-        </>
-      ),
-      description:
-        'Engineered for the Indian thermal wash experience. Warm steam activates chelating agents that bind & dissolve calcified mineral hardness, heavy metals, and sebum crust without stripping natural lipids. Finished with extremolyte Ectoin.',
+      theme: 'dark' as const,
+      tabLabel: 'Hot Water Shampoo',
+      posterImage: HOT_WATER_HERO_POSTER,
+      posterAlt: "India's First Ever Hot Water Shampoo — Hard-Water Haircare Made for India",
       primaryCtaText: 'GET HOT WATER SHAMPOO — ₹449',
       primaryAction: () => addItem('hot-water-shampoo', 'hot-full', 1),
       secondaryCtaText: 'EXPLORE FORMULATION',
       secondaryAction: () => openProductDetail('hot-water-shampoo'),
-      highlights: [
-        { text: 'Steam-Activated Thermal Chelation', dotColor: 'bg-[#9E3C1B]' },
-        { text: 'Finished with Ectoin Heat Shield', dotColor: 'bg-[#C5A880]' },
-        { text: '100% Colour Safe & Sulphate-Free', dotColor: 'bg-[#15803D]' },
-      ],
-      image: PRODUCT_IMAGE_HOT_WATER_STANDALONE,
-      imageAlt: 'Hairology Hot Water Shampoo 250ml with Thermal Steam Chelation',
-      badgeText: "INDIA'S 1ST HOT WATER FORMULATION • 250 ML",
-      badgeIcon: <Flame className="w-3.5 h-3.5 fill-[#C5A880] text-[#C5A880]" />,
-      floatingCardTitle: 'Hot Water Shampoo',
-      floatingCardSubtitle: 'Heat Shield + Hair Protection (250 ml)',
-      floatingCardPrice: '₹449',
-      floatingCardDiscount: '10% OFF • TAP TO VIEW',
-      onCardClick: () => openProductDetail('hot-water-shampoo'),
-      accentColor: '#9E3C1B',
+      onPosterClick: () => openProductDetail('hot-water-shampoo'),
     },
   ];
 
   const currentSlide = slides[currentSlideIndex];
+  const isDarkPosterSlide = currentSlide.theme === 'dark';
 
   // Auto-shift every 10 seconds (10,000 ms)
   useEffect(() => {
@@ -122,27 +71,41 @@ export const HeroSection: React.FC = () => {
   };
 
   return (
-    <section 
+    <section
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      className="relative w-full min-h-[620px] sm:min-h-[720px] lg:min-h-[800px] flex items-center overflow-hidden border-b border-[#E8DFD1]/80 bg-[#FCFAF7]"
+      className={`relative w-full min-h-[620px] sm:min-h-[720px] lg:min-h-[800px] flex items-center overflow-hidden border-b transition-colors duration-500 ${
+        isDarkPosterSlide
+          ? 'bg-[#121110] border-[#C5A880]/20'
+          : 'bg-[#FCFAF7] border-[#E8DFD1]/80'
+      }`}
     >
       {/* 1. Ambient Background Lighting */}
       <div className="absolute inset-0 w-full h-full z-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-[#C5A880]/15 rounded-full blur-3xl" />
-        <div 
-          className={`absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full blur-3xl transition-colors duration-1000 ${
-            currentSlideIndex === 0 ? 'bg-[#E11D48]/5' : 'bg-[#9E3C1B]/8'
-          }`} 
-        />
-        <div className="absolute inset-0 bg-radial from-transparent via-[#FCFAF7]/60 to-[#FCFAF7]" />
+        {isDarkPosterSlide ? (
+          <>
+            <div className="absolute top-[-12%] left-1/2 -translate-x-1/2 w-[720px] h-[520px] bg-[#9E3C1B]/20 rounded-full blur-3xl" />
+            <div className="absolute bottom-[-15%] left-1/2 -translate-x-1/2 w-[680px] h-[420px] bg-[#C5A880]/10 rounded-full blur-3xl" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#121110]/70 via-[#161311]/90 to-[#121110]" />
+          </>
+        ) : (
+          <>
+            <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-[#C5A880]/15 rounded-full blur-3xl" />
+            <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full blur-3xl bg-[#E11D48]/5" />
+            <div className="absolute inset-0 bg-radial from-transparent via-[#FCFAF7]/60 to-[#FCFAF7]" />
+          </>
+        )}
       </div>
 
       {/* Floating Side Slide Arrows */}
       <button
         type="button"
         onClick={handlePrevSlide}
-        className="hidden md:flex absolute left-3 lg:left-6 top-1/2 -translate-y-1/2 z-30 w-11 h-11 lg:w-12 lg:h-12 rounded-full bg-white/90 hover:bg-[#121110] text-[#121110] hover:text-[#C5A880] border border-[#E8DFD1] hover:border-[#C5A880] shadow-xl items-center justify-center transition-all cursor-pointer hover:scale-110 active:scale-95 group backdrop-blur-sm"
+        className={`hidden md:flex absolute left-3 lg:left-6 top-1/2 -translate-y-1/2 z-30 w-11 h-11 lg:w-12 lg:h-12 rounded-full shadow-xl items-center justify-center transition-all cursor-pointer hover:scale-110 active:scale-95 group backdrop-blur-sm border ${
+          isDarkPosterSlide
+            ? 'bg-[#1F1C19]/90 hover:bg-[#C5A880] text-[#FDFBF7] hover:text-[#121110] border-[#C5A880]/30'
+            : 'bg-white/90 hover:bg-[#121110] text-[#121110] hover:text-[#C5A880] border-[#E8DFD1] hover:border-[#C5A880]'
+        }`}
         aria-label="Previous slide"
       >
         <ChevronLeft className="w-5 h-5 lg:w-6 lg:h-6 group-hover:-translate-x-0.5 transition-transform" />
@@ -151,15 +114,18 @@ export const HeroSection: React.FC = () => {
       <button
         type="button"
         onClick={handleNextSlide}
-        className="hidden md:flex absolute right-3 lg:right-6 top-1/2 -translate-y-1/2 z-30 w-11 h-11 lg:w-12 lg:h-12 rounded-full bg-white/90 hover:bg-[#121110] text-[#121110] hover:text-[#C5A880] border border-[#E8DFD1] hover:border-[#C5A880] shadow-xl items-center justify-center transition-all cursor-pointer hover:scale-110 active:scale-95 group backdrop-blur-sm"
+        className={`hidden md:flex absolute right-3 lg:right-6 top-1/2 -translate-y-1/2 z-30 w-11 h-11 lg:w-12 lg:h-12 rounded-full shadow-xl items-center justify-center transition-all cursor-pointer hover:scale-110 active:scale-95 group backdrop-blur-sm border ${
+          isDarkPosterSlide
+            ? 'bg-[#1F1C19]/90 hover:bg-[#C5A880] text-[#FDFBF7] hover:text-[#121110] border-[#C5A880]/30'
+            : 'bg-white/90 hover:bg-[#121110] text-[#121110] hover:text-[#C5A880] border-[#E8DFD1] hover:border-[#C5A880]'
+        }`}
         aria-label="Next slide"
       >
         <ChevronRight className="w-5 h-5 lg:w-6 lg:h-6 group-hover:translate-x-0.5 transition-transform" />
       </button>
 
       {/* 2. Main Slideshow Content Area */}
-      <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-20 lg:py-24">
-        
+      <div className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 lg:py-12">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentSlide.id}
@@ -167,106 +133,35 @@ export const HeroSection: React.FC = () => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.55, ease: 'easeInOut' }}
-            className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center"
+            className="flex flex-col items-center justify-center gap-6"
           >
-            {/* Left Column: Editorial Typography */}
-            <div className="lg:col-span-7 text-left space-y-6 sm:space-y-8">
-              
-              {/* Top Kicker */}
-              <div className="inline-block">
-                <div className="text-xs sm:text-sm font-semibold tracking-[0.28em] text-[#71717A] uppercase bg-white/80 backdrop-blur-sm px-3.5 py-1.5 rounded-full border border-[#E8DFD1]/80 shadow-2xs">
-                  {currentSlide.kicker}
-                </div>
-              </div>
-
-              {/* Main Headline */}
-              <h1 className="font-['Cormorant_Garamond',Georgia,serif] text-[3.15rem] sm:text-[4rem] lg:text-[4.85rem] xl:text-[5.85rem] font-semibold text-[#121110] leading-[0.98] tracking-[-0.02em]">
-                {currentSlide.headline}
-              </h1>
-
-              {/* Subheading */}
-              <p className="text-base sm:text-lg text-[#3D3A37] font-normal leading-relaxed max-w-xl">
-                {currentSlide.description}
-              </p>
-
-              {/* Action CTAs */}
-              <div className="flex flex-wrap items-center gap-4 pt-2">
-                <button
-                  onClick={currentSlide.primaryAction}
-                  className="px-8 py-4 bg-[#121110] hover:bg-[#2A2724] text-[#C5A880] text-xs sm:text-sm font-bold tracking-widest uppercase rounded-2xl shadow-xl transition-all duration-300 flex items-center gap-3 group cursor-pointer border border-[#C5A880]/30 hover:border-[#C5A880] hover:scale-[1.02]"
-                >
-                  <span>{currentSlide.primaryCtaText}</span>
-                  <ArrowRight className="w-4 h-4 text-[#C5A880] group-hover:translate-x-1.5 transition-transform" />
-                </button>
-
-                <button
-                  onClick={currentSlide.secondaryAction}
-                  className="px-7 py-4 bg-white/90 hover:bg-[#F3EDE2] text-[#121110] border border-[#E8DFD1] text-xs sm:text-sm font-bold tracking-widest uppercase rounded-2xl transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer hover:scale-[1.02]"
-                >
-                  {currentSlide.secondaryCtaText}
-                </button>
-              </div>
-
-              {/* Quick Value Highlights */}
-              <div className="pt-4 flex flex-wrap items-center gap-3 sm:gap-6 text-xs text-[#6B7280]">
-                {currentSlide.highlights.map((h, i) => (
-                  <div key={i} className="flex items-center gap-1.5 font-medium">
-                    <span className={`w-1.5 h-1.5 rounded-full ${h.dotColor}`} />
-                    <span>{h.text}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Right Column: Prominent Bottle Image Card */}
-            <div className="lg:col-span-5 relative">
-              <div 
-                onClick={currentSlide.onCardClick}
-                className="relative aspect-[3/4] sm:aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl border border-[#E8DFD1] bg-[#F7F4EE] group cursor-pointer hover:shadow-[0_25px_60px_-15px_rgba(197,168,128,0.35)] transition-all duration-500 hover:-translate-y-1.5"
+            <div className="relative w-full max-w-6xl mx-auto">
+              <div
+                onClick={currentSlide.onPosterClick}
+                className={`relative w-full rounded-3xl overflow-hidden border cursor-pointer group ${
+                  isDarkPosterSlide
+                    ? 'shadow-[0_30px_90px_rgba(0,0,0,0.85)] border-[#C5A880]/30 bg-[#141210]'
+                    : 'shadow-[0_25px_70px_-15px_rgba(140,115,82,0.28)] border-[#E8DFD1] bg-[#F7F1E7]'
+                }`}
               >
                 <img
-                  src={currentSlide.image}
-                  alt={currentSlide.imageAlt}
-                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out"
+                  src={currentSlide.posterImage}
+                  alt={currentSlide.posterAlt}
+                  className="w-full h-auto object-contain mx-auto block group-hover:scale-[1.015] transition-transform duration-700 ease-out"
                 />
 
-                {/* Gradient Vignette */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent pointer-events-none" />
-
-                {/* Top Luxury Badge */}
-                <div className="absolute top-4 left-4 inline-flex items-center gap-1.5 bg-[#121110]/90 backdrop-blur-md text-[#C5A880] text-xs font-bold tracking-wider uppercase px-3.5 py-1.5 rounded-full border border-[#C5A880]/30 shadow-lg">
-                  {currentSlide.badgeIcon}
-                  <span>{currentSlide.badgeText}</span>
-                </div>
-
-                {/* Floating Bottom Card */}
-                <div className="absolute bottom-4 left-4 right-4 bg-white/95 backdrop-blur-md p-4 rounded-2xl border border-[#E8DFD1]/80 shadow-xl flex items-center justify-between transition-all group-hover:bg-[#121110] group-hover:text-white group-hover:border-[#C5A880]/40">
-                  <div>
-                    <div className="font-serif font-bold text-base text-[#121110] group-hover:text-[#C5A880] transition-colors">
-                      {currentSlide.floatingCardTitle}
-                    </div>
-                    <div className="text-xs text-[#8A7463] group-hover:text-white/80 transition-colors">
-                      {currentSlide.floatingCardSubtitle}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-serif font-bold text-lg text-[#121110] group-hover:text-[#C5A880] transition-colors">
-                      {currentSlide.floatingCardPrice}
-                    </div>
-                    <div className="text-[10px] text-[#15803D] group-hover:text-[#CBF341] font-bold">
-                      {currentSlide.floatingCardDiscount}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Mobile Slide Navigation Arrows on Card */}
+                {/* Mobile Slide Navigation Arrows */}
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     handlePrevSlide();
                   }}
-                  className="md:hidden absolute left-2.5 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 hover:bg-[#121110] text-[#121110] hover:text-[#C5A880] shadow-md flex items-center justify-center transition-all cursor-pointer"
+                  className={`md:hidden absolute left-2.5 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full border shadow-md flex items-center justify-center transition-all cursor-pointer ${
+                    isDarkPosterSlide
+                      ? 'bg-[#121110]/85 hover:bg-[#C5A880] text-[#FDFBF7] hover:text-[#121110] border-[#C5A880]/30'
+                      : 'bg-white/90 hover:bg-[#121110] text-[#121110] hover:text-[#C5A880] border-[#E8DFD1]'
+                  }`}
                   aria-label="Previous slide"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -277,7 +172,11 @@ export const HeroSection: React.FC = () => {
                     e.stopPropagation();
                     handleNextSlide();
                   }}
-                  className="md:hidden absolute right-2.5 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-white/90 hover:bg-[#121110] text-[#121110] hover:text-[#C5A880] shadow-md flex items-center justify-center transition-all cursor-pointer"
+                  className={`md:hidden absolute right-2.5 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full border shadow-md flex items-center justify-center transition-all cursor-pointer ${
+                    isDarkPosterSlide
+                      ? 'bg-[#121110]/85 hover:bg-[#C5A880] text-[#FDFBF7] hover:text-[#121110] border-[#C5A880]/30'
+                      : 'bg-white/90 hover:bg-[#121110] text-[#121110] hover:text-[#C5A880] border-[#E8DFD1]'
+                  }`}
                   aria-label="Next slide"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -285,12 +184,44 @@ export const HeroSection: React.FC = () => {
               </div>
             </div>
 
+            {/* Action CTAs below big poster */}
+            <div className="flex flex-wrap items-center justify-center gap-3.5 sm:gap-4">
+              <button
+                onClick={currentSlide.primaryAction}
+                className={`px-7 sm:px-8 py-3.5 sm:py-4 text-xs sm:text-sm font-bold tracking-widest uppercase rounded-2xl shadow-xl transition-all duration-300 flex items-center gap-3 group cursor-pointer hover:scale-[1.02] ${
+                  isDarkPosterSlide
+                    ? 'bg-[#C5A880] hover:bg-[#D4BA94] text-[#121110]'
+                    : 'bg-[#121110] hover:bg-[#2A2724] text-[#C5A880] border border-[#C5A880]/30 hover:border-[#C5A880]'
+                }`}
+              >
+                <span>{currentSlide.primaryCtaText}</span>
+                <ArrowRight
+                  className={`w-4 h-4 group-hover:translate-x-1.5 transition-transform ${
+                    isDarkPosterSlide ? 'text-[#121110]' : 'text-[#C5A880]'
+                  }`}
+                />
+              </button>
+
+              <button
+                onClick={currentSlide.secondaryAction}
+                className={`px-6 sm:px-7 py-3.5 sm:py-4 text-xs sm:text-sm font-bold tracking-widest uppercase rounded-2xl transition-all duration-300 shadow-sm cursor-pointer hover:scale-[1.02] border ${
+                  isDarkPosterSlide
+                    ? 'bg-white/10 hover:bg-white/20 text-[#FDFBF7] border-[#C5A880]/40'
+                    : 'bg-white/90 hover:bg-[#F3EDE2] text-[#121110] border-[#E8DFD1] hover:shadow-md'
+                }`}
+              >
+                {currentSlide.secondaryCtaText}
+              </button>
+            </div>
           </motion.div>
         </AnimatePresence>
 
         {/* 3. Slideshow Navigation Controls & 10s Timer Progress Bar */}
-        <div className="mt-10 sm:mt-12 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-[#E8DFD1]/60">
-          
+        <div
+          className={`mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t ${
+            isDarkPosterSlide ? 'border-[#C5A880]/20' : 'border-[#E8DFD1]/60'
+          }`}
+        >
           {/* Slide Indicator Tabs */}
           <div className="flex items-center gap-3">
             {slides.map((s, idx) => {
@@ -301,15 +232,17 @@ export const HeroSection: React.FC = () => {
                   onClick={() => setCurrentSlideIndex(idx)}
                   className={`group relative py-2 px-3 sm:px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                     isActive
-                      ? 'bg-[#121110] text-[#C5A880] shadow-md border border-[#C5A880]/30'
+                      ? isDarkPosterSlide
+                        ? 'bg-[#C5A880] text-[#121110] shadow-md border border-[#C5A880]'
+                        : 'bg-[#121110] text-[#C5A880] shadow-md border border-[#C5A880]/30'
+                      : isDarkPosterSlide
+                      ? 'bg-white/10 hover:bg-white/15 text-[#E8DFD1] border border-[#C5A880]/25'
                       : 'bg-white/80 hover:bg-white text-[#71717A] border border-[#E8DFD1]'
                   }`}
                 >
                   <span className="font-mono text-[10px] opacity-70">0{idx + 1}</span>
-                  <span className="uppercase tracking-wider">
-                    {idx === 0 ? 'The Hairology Trio' : 'Hot Water Shampoo'}
-                  </span>
-                  
+                  <span className="uppercase tracking-wider">{s.tabLabel}</span>
+
                   {/* Active 10-Second Countdown Animation Bar inside Active Pill */}
                   {isActive && !isPaused && (
                     <motion.div
@@ -318,7 +251,9 @@ export const HeroSection: React.FC = () => {
                       animate={{ scaleX: 1 }}
                       transition={{ duration: 10, ease: 'linear' }}
                       style={{ originX: 0 }}
-                      className="absolute bottom-0 left-2 right-2 h-0.5 bg-[#C5A880] rounded-full"
+                      className={`absolute bottom-0 left-2 right-2 h-0.5 rounded-full ${
+                        isDarkPosterSlide ? 'bg-[#121110]' : 'bg-[#C5A880]'
+                      }`}
                     />
                   )}
                 </button>
@@ -327,7 +262,11 @@ export const HeroSection: React.FC = () => {
           </div>
 
           {/* Timing Info & Manual Arrows */}
-          <div className="flex items-center gap-4 text-xs text-[#8A7463]">
+          <div
+            className={`flex items-center gap-4 text-xs ${
+              isDarkPosterSlide ? 'text-[#C5A880]/80' : 'text-[#8A7463]'
+            }`}
+          >
             <span className="text-[11px] font-medium hidden md:inline">
               {isPaused ? '⏸ Slideshow paused' : '⏱ Auto-shifts every 10s'}
             </span>
@@ -335,7 +274,11 @@ export const HeroSection: React.FC = () => {
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handlePrevSlide}
-                className="w-9 h-9 rounded-xl bg-white border border-[#E8DFD1] hover:border-[#C5A880] text-[#121110] hover:text-[#C5A880] flex items-center justify-center transition-all shadow-2xs hover:shadow-sm cursor-pointer"
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shadow-2xs hover:shadow-sm cursor-pointer border ${
+                  isDarkPosterSlide
+                    ? 'bg-white/10 border-[#C5A880]/30 hover:border-[#C5A880] text-[#FDFBF7] hover:text-[#C5A880]'
+                    : 'bg-white border-[#E8DFD1] hover:border-[#C5A880] text-[#121110] hover:text-[#C5A880]'
+                }`}
                 aria-label="Previous slide"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -343,33 +286,45 @@ export const HeroSection: React.FC = () => {
 
               <button
                 onClick={handleNextSlide}
-                className="w-9 h-9 rounded-xl bg-white border border-[#E8DFD1] hover:border-[#C5A880] text-[#121110] hover:text-[#C5A880] flex items-center justify-center transition-all shadow-2xs hover:shadow-sm cursor-pointer"
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shadow-2xs hover:shadow-sm cursor-pointer border ${
+                  isDarkPosterSlide
+                    ? 'bg-white/10 border-[#C5A880]/30 hover:border-[#C5A880] text-[#FDFBF7] hover:text-[#C5A880]'
+                    : 'bg-white border-[#E8DFD1] hover:border-[#C5A880] text-[#121110] hover:text-[#C5A880]'
+                }`}
                 aria-label="Next slide"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
-
         </div>
 
         {/* 4. Scroll Down Arrow Indicator to Products */}
-        <div className="flex justify-center pt-8">
+        <div className="flex justify-center pt-7">
           <button
             type="button"
             onClick={scrollToProducts}
-            className="flex flex-col items-center gap-1.5 text-[#8A7463] hover:text-[#121110] transition-colors cursor-pointer group"
+            className={`flex flex-col items-center gap-1.5 transition-colors cursor-pointer group ${
+              isDarkPosterSlide
+                ? 'text-[#C5A880]/80 hover:text-[#FDFBF7]'
+                : 'text-[#8A7463] hover:text-[#121110]'
+            }`}
             aria-label="Scroll down to products"
           >
-            <span className="text-[10px] font-bold tracking-[0.25em] uppercase text-[#8A7463] group-hover:text-[#121110] transition-colors">
+            <span className="text-[10px] font-bold tracking-[0.25em] uppercase transition-colors">
               SCROLL TO PRODUCTS
             </span>
-            <div className="w-8 h-8 rounded-full border border-[#E8DFD1] group-hover:border-[#C5A880] bg-white/80 group-hover:bg-[#121110] text-[#121110] group-hover:text-[#C5A880] flex items-center justify-center transition-all shadow-2xs group-hover:scale-110">
-              <ChevronDown className="w-4 h-4 animate-bounce text-[#C5A880]" />
+            <div
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-2xs group-hover:scale-110 border ${
+                isDarkPosterSlide
+                  ? 'border-[#C5A880]/40 bg-white/10 group-hover:bg-[#C5A880] text-[#C5A880] group-hover:text-[#121110]'
+                  : 'border-[#E8DFD1] group-hover:border-[#C5A880] bg-white/80 group-hover:bg-[#121110] text-[#121110] group-hover:text-[#C5A880]'
+              }`}
+            >
+              <ChevronDown className="w-4 h-4 animate-bounce" />
             </div>
           </button>
         </div>
-
       </div>
     </section>
   );

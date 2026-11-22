@@ -14,8 +14,6 @@ import {
   getDocs,
   getDocFromServer,
   collection,
-  query,
-  orderBy,
   onSnapshot,
   writeBatch,
   serverTimestamp,
@@ -120,6 +118,14 @@ export async function signInFounderWithGoogle(): Promise<FirebaseUser> {
         `Authorize domain "${window.location.hostname}" in Firebase Console → Authentication → Settings → Authorized domains to sync cloud orders from this live site.`
       );
     }
+    if (code === 'auth/popup-blocked') {
+      throw new Error(
+        'Google Sign-In popup was blocked by your browser. Please allow popups for this site and click Connect Cloud Sync again.'
+      );
+    }
+    if (code === 'auth/popup-closed-by-user') {
+      throw new Error('Google Sign-In window was closed before completing sign-in.');
+    }
     throw err;
   }
 }
@@ -147,10 +153,22 @@ function sanitizeItemsForFirestore(items: CartItem[]): CartItem[] {
 }
 
 export async function persistPendingOrderToFirestore(order: Order): Promise<void> {
+  return writeOrderBatchToFirestore(order, false);
+}
+
+export async function createManualOrderInFirestore(order: Order): Promise<void> {
+  return writeOrderBatchToFirestore(order, true);
+}
+
+async function writeOrderBatchToFirestore(order: Order, allowPaidStatus: boolean): Promise<void> {
   const orderId = clampString(order.id, 32);
   if (!/^[a-zA-Z0-9_-]{6,32}$/.test(orderId)) {
     throw new Error('Invalid order ID format for Firestore persistence.');
   }
+
+  const isPaid = allowPaidStatus && order.paymentStatus === 'PAID';
+  const paymentStatus: Order['paymentStatus'] = isPaid ? 'PAID' : 'PENDING';
+  const orderStatus: Order['orderStatus'] = isPaid ? 'CONFIRMED' : 'PENDING_CONFIRMATION';
 
   const cleanDigits = order.deliveryAddress.pincode.replace(/\D/g, '').slice(0, 6).padEnd(6, '0');
   const orderDocPayload: Record<string, unknown> = {
@@ -160,7 +178,7 @@ export async function persistPendingOrderToFirestore(order: Order): Promise<void
     deliveryAddress: {
       recipientName: clampString(order.deliveryAddress.recipientName, 100, 'Customer'),
       phoneNumber: clampString(order.deliveryAddress.phoneNumber, 20, order.customerPhone),
-      streetAddress: clampString(order.deliveryAddress.streetAddress, 300, 'Address'),
+      streetAddress: clampString(order.deliveryAddress.streetAddress, 300, 'Direct UPI Order'),
       city: clampString(order.deliveryAddress.city, 80, 'India'),
       state: clampString(order.deliveryAddress.state, 80, 'India'),
       pincode: cleanDigits,
@@ -172,24 +190,33 @@ export async function persistPendingOrderToFirestore(order: Order): Promise<void
     codFee: 0,
     total: Math.max(1, Number(order.total) || 1),
     paymentMethod: 'UPI_QR',
-    paymentStatus: 'PENDING',
-    orderStatus: 'PENDING_CONFIRMATION',
+    paymentStatus,
+    orderStatus,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
 
   if (order.payerUpi) orderDocPayload.payerUpi = clampString(order.payerUpi, 64);
   if (order.trackingNumber) orderDocPayload.trackingNumber = clampString(order.trackingNumber, 64);
+  if (isPaid && order.gatewayTransactionId) {
+    orderDocPayload.gatewayTransactionId = clampString(order.gatewayTransactionId, 64);
+  }
+  if (isPaid) {
+    orderDocPayload.paymentVerifiedAt = clampString(order.paymentVerifiedAt || new Date().toISOString(), 40);
+  }
 
   const statusDocPayload: Record<string, unknown> = {
     orderId,
-    paymentStatus: 'PENDING',
-    orderStatus: 'PENDING_CONFIRMATION',
+    paymentStatus,
+    orderStatus,
     total: Math.max(1, Number(order.total) || 1),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
   if (order.trackingNumber) statusDocPayload.trackingNumber = clampString(order.trackingNumber, 64);
+  if (isPaid && order.gatewayTransactionId) {
+    statusDocPayload.gatewayTransactionId = clampString(order.gatewayTransactionId, 64);
+  }
 
   const batch = writeBatch(db);
   batch.set(doc(db, 'orders', orderId), orderDocPayload);
@@ -239,48 +266,9 @@ export function subscribeToPublicOrderStatus(
 export async function fetchAllOrdersAdminOnce(): Promise<Order[]> {
   const path = 'orders';
   try {
-    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => {
-      const data = d.data();
-      return {
-        id: String(data.id || d.id),
-        createdAt: typeof data.createdAtIso === 'string' ? data.createdAtIso : new Date().toISOString(),
-        customerPhone: String(data.customerPhone || ''),
-        deliveryAddress: data.deliveryAddress as Order['deliveryAddress'],
-        items: Array.isArray(data.items) ? (data.items as CartItem[]) : [],
-        subtotal: Number(data.subtotal || 0),
-        discount: Number(data.discount || 0),
-        shipping: Number(data.shipping || 0),
-        codFee: Number(data.codFee || 0),
-        total: Number(data.total || 0),
-        paymentMethod: (data.paymentMethod as Order['paymentMethod']) || 'UPI_QR',
-        paymentStatus: (data.paymentStatus as Order['paymentStatus']) || 'PENDING',
-        orderStatus: (data.orderStatus as Order['orderStatus']) || 'PENDING_CONFIRMATION',
-        payerUpi: typeof data.payerUpi === 'string' ? data.payerUpi : undefined,
-        trackingNumber: typeof data.trackingNumber === 'string' ? data.trackingNumber : undefined,
-        gatewayTransactionId:
-          typeof data.gatewayTransactionId === 'string' ? data.gatewayTransactionId : undefined,
-        paymentVerifiedAt: typeof data.paymentVerifiedAt === 'string' ? data.paymentVerifiedAt : undefined,
-        paymentFailureReason:
-          typeof data.paymentFailureReason === 'string' ? data.paymentFailureReason : undefined,
-      };
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, path);
-  }
-}
-
-export function subscribeToAllOrdersAdmin(
-  onOrders: (orders: Order[]) => void,
-  onError?: (err: Error) => void
-): Unsubscribe {
-  const path = 'orders';
-  const q = query(collection(db, path), orderBy('createdAt', 'desc'));
-  return onSnapshot(
-    q,
-    snapshot => {
-      const mapped: Order[] = snapshot.docs.map(d => {
+    const snapshot = await getDocs(collection(db, path));
+    return snapshot.docs
+      .map(d => {
         const data = d.data();
         return {
           id: String(data.id || d.id),
@@ -304,7 +292,48 @@ export function subscribeToAllOrdersAdmin(
           paymentFailureReason:
             typeof data.paymentFailureReason === 'string' ? data.paymentFailureReason : undefined,
         };
-      });
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+  }
+}
+
+export function subscribeToAllOrdersAdmin(
+  onOrders: (orders: Order[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  const path = 'orders';
+  return onSnapshot(
+    collection(db, path),
+    snapshot => {
+      const mapped: Order[] = snapshot.docs
+        .map(d => {
+          const data = d.data();
+          return {
+            id: String(data.id || d.id),
+            createdAt: typeof data.createdAtIso === 'string' ? data.createdAtIso : new Date().toISOString(),
+            customerPhone: String(data.customerPhone || ''),
+            deliveryAddress: data.deliveryAddress as Order['deliveryAddress'],
+            items: Array.isArray(data.items) ? (data.items as CartItem[]) : [],
+            subtotal: Number(data.subtotal || 0),
+            discount: Number(data.discount || 0),
+            shipping: Number(data.shipping || 0),
+            codFee: Number(data.codFee || 0),
+            total: Number(data.total || 0),
+            paymentMethod: (data.paymentMethod as Order['paymentMethod']) || 'UPI_QR',
+            paymentStatus: (data.paymentStatus as Order['paymentStatus']) || 'PENDING',
+            orderStatus: (data.orderStatus as Order['orderStatus']) || 'PENDING_CONFIRMATION',
+            payerUpi: typeof data.payerUpi === 'string' ? data.payerUpi : undefined,
+            trackingNumber: typeof data.trackingNumber === 'string' ? data.trackingNumber : undefined,
+            gatewayTransactionId:
+              typeof data.gatewayTransactionId === 'string' ? data.gatewayTransactionId : undefined,
+            paymentVerifiedAt: typeof data.paymentVerifiedAt === 'string' ? data.paymentVerifiedAt : undefined,
+            paymentFailureReason:
+              typeof data.paymentFailureReason === 'string' ? data.paymentFailureReason : undefined,
+          };
+        })
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       onOrders(mapped);
     },
     error => {

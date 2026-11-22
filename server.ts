@@ -5,8 +5,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Order, OrderAnalytics, ProductSalesMetric } from './src/types/index.ts';
 
-const PORT = Number(process.env.PORT || 3000);
-const AUTHORIZED_FOUNDER_EMAIL = 'guddan1102@gmail.com';
+function resolvePort(): number {
+  const portFlagIdx = process.argv.findIndex(arg => arg === '--port' || arg.startsWith('--port='));
+  if (portFlagIdx !== -1) {
+    const arg = process.argv[portFlagIdx];
+    const raw = arg.includes('=') ? arg.split('=')[1] : process.argv[portFlagIdx + 1];
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  const envPort = Number(process.env.PORT || 0);
+  if (envPort > 0 && String(envPort) !== process.env.NGINX_PORT) {
+    return envPort;
+  }
+  return Number(process.env.DEFAULT_APP_PORT || 3000);
+}
+
+const PORT = resolvePort();
+const AUTHORIZED_FOUNDER_EMAILS = [
+  'guddan1102@gmail.com',
+  'digitalssanchiagarwal@gmail.com',
+];
 const DEFAULT_FOUNDER_CODE = process.env.FOUNDER_ACCESS_CODE || '4448989';
 const CONNECTED_UPI_ID = 'guddan1102@okhdfcbank';
 const CONNECTED_UPI_NAME = 'HAIROLOGY';
@@ -268,7 +286,7 @@ function requireFounderAuth(req: Request, res: Response, next: NextFunction): vo
   const emailHeader = String(req.headers['x-founder-email'] || '').trim().toLowerCase();
   const codeHeader = String(req.headers['x-founder-code'] || '').trim();
 
-  if (emailHeader !== AUTHORIZED_FOUNDER_EMAIL || codeHeader !== getFounderAccessCode()) {
+  if (!AUTHORIZED_FOUNDER_EMAILS.includes(emailHeader) || codeHeader !== getFounderAccessCode()) {
     res.status(401).json({ error: 'Unauthorized: Founder credentials required.' });
     return;
   }
@@ -286,8 +304,8 @@ async function createApp() {
   // ================= FOUNDER AUTHENTICATION ROUTES =================
   app.post('/api/founder/verify-email', (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
-    if (email === AUTHORIZED_FOUNDER_EMAIL) {
-      res.json({ valid: true });
+    if (AUTHORIZED_FOUNDER_EMAILS.includes(email)) {
+      res.json({ valid: true, email });
       return;
     }
     res.status(403).json({ valid: false, error: 'This Gmail address is not authorized for this panel.' });
@@ -296,7 +314,7 @@ async function createApp() {
   app.post('/api/founder/login', (req, res) => {
     const email = String(req.body?.email || '').trim().toLowerCase();
     const code = String(req.body?.code || '').trim();
-    if (email !== AUTHORIZED_FOUNDER_EMAIL) {
+    if (!AUTHORIZED_FOUNDER_EMAILS.includes(email)) {
       res.status(403).json({ authenticated: false, error: 'Unauthorized Gmail address.' });
       return;
     }
@@ -304,7 +322,7 @@ async function createApp() {
       res.status(401).json({ authenticated: false, error: 'Incorrect security access code.' });
       return;
     }
-    res.json({ authenticated: true, email: AUTHORIZED_FOUNDER_EMAIL });
+    res.json({ authenticated: true, email });
   });
 
   app.post('/api/founder/change-code', requireFounderAuth, (req, res) => {
@@ -370,7 +388,8 @@ async function createApp() {
           };
           writeOrders(orders);
           const ord = orders[existingIdx];
-          const upiDeepLink = `upi://pay?pa=${encodeURIComponent(CONNECTED_UPI_ID)}&pn=${encodeURIComponent(CONNECTED_UPI_NAME)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Hairology #${ord.id}`)}`;
+          const upiAmountParam = total > 2000 ? '' : `&am=${total.toFixed(2)}`;
+          const upiDeepLink = `upi://pay?pa=${encodeURIComponent(CONNECTED_UPI_ID)}&pn=${encodeURIComponent(CONNECTED_UPI_NAME)}${upiAmountParam}&cu=INR&tn=${encodeURIComponent(`Hairology #${ord.id}`)}`;
           res.json({ order: ord, upiId: CONNECTED_UPI_ID, upiDeepLink });
           return;
         }
@@ -406,7 +425,8 @@ async function createApp() {
 
       writeOrders([newOrder, ...orders]);
       void dispatchOwnerOrderNotification(newOrder);
-      const upiDeepLink = `upi://pay?pa=${encodeURIComponent(CONNECTED_UPI_ID)}&pn=${encodeURIComponent(CONNECTED_UPI_NAME)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Hairology #${orderId}`)}`;
+      const upiAmountParam = total > 2000 ? '' : `&am=${total.toFixed(2)}`;
+      const upiDeepLink = `upi://pay?pa=${encodeURIComponent(CONNECTED_UPI_ID)}&pn=${encodeURIComponent(CONNECTED_UPI_NAME)}${upiAmountParam}&cu=INR&tn=${encodeURIComponent(`Hairology #${orderId}`)}`;
 
       res.json({
         order: newOrder,
@@ -461,6 +481,86 @@ async function createApp() {
     writeOrders([]);
     const analytics = computeOrderAnalytics([]);
     res.json({ success: true, orders: [], analytics });
+  });
+
+  app.post('/api/orders/manual-create', requireFounderAuth, (req, res) => {
+    try {
+      const body = req.body || {};
+      const orderInput = body.order && typeof body.order === 'object' ? body.order : body;
+      const recipientName = String(
+        orderInput?.deliveryAddress?.recipientName || orderInput?.recipientName || ''
+      ).trim();
+      const rawPhone = String(
+        orderInput?.customerPhone || orderInput?.deliveryAddress?.phoneNumber || orderInput?.phoneNumber || ''
+      ).trim();
+      const total = Number(orderInput?.total || 0);
+      const subtotal = Number(orderInput?.subtotal || total || 0);
+      const shipping = Number(orderInput?.shipping || 0);
+      const items = Array.isArray(orderInput?.items) ? orderInput.items : [];
+
+      if (!recipientName || !rawPhone || !Number.isFinite(total) || total <= 0 || items.length === 0) {
+        res.status(400).json({ error: 'Customer name, phone, items, and valid order amount (> ₹0) are required.' });
+        return;
+      }
+
+      const isPaid = orderInput?.paymentStatus === 'PAID';
+      const orderId =
+        typeof orderInput?.id === 'string' && /^[a-zA-Z0-9_-]{6,32}$/.test(orderInput.id.trim())
+          ? orderInput.id.trim()
+          : `HR-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      const utrRef = String(orderInput?.gatewayTransactionId || orderInput?.utrRef || '').trim();
+      const cleanPincode = String(orderInput?.deliveryAddress?.pincode || '400001')
+        .replace(/\D/g, '')
+        .slice(0, 6)
+        .padEnd(6, '0');
+
+      const newOrder: Order = {
+        id: orderId,
+        createdAt: typeof orderInput?.createdAt === 'string' ? orderInput.createdAt : new Date().toISOString(),
+        customerPhone: rawPhone,
+        deliveryAddress: {
+          recipientName,
+          phoneNumber: rawPhone,
+          streetAddress: String(orderInput?.deliveryAddress?.streetAddress || 'Direct UPI Order').trim(),
+          city: String(orderInput?.deliveryAddress?.city || 'India').trim(),
+          state: String(orderInput?.deliveryAddress?.state || 'India').trim(),
+          pincode: cleanPincode,
+        },
+        items,
+        subtotal,
+        discount: 0,
+        shipping,
+        codFee: 0,
+        total,
+        paymentMethod: 'UPI_QR',
+        paymentStatus: isPaid ? 'PAID' : 'PENDING',
+        orderStatus: isPaid ? 'CONFIRMED' : 'PENDING_CONFIRMATION',
+        payerUpi: CONNECTED_UPI_ID,
+        trackingNumber:
+          typeof orderInput?.trackingNumber === 'string' && orderInput.trackingNumber
+            ? orderInput.trackingNumber
+            : `DELHIVERY-AWB-${Math.floor(100000000 + Math.random() * 900000000)}`,
+        ...(isPaid
+          ? {
+              gatewayTransactionId: utrRef || `UPI-RCVD-${Date.now().toString().slice(-6)}`,
+              paymentVerifiedAt:
+                typeof orderInput?.paymentVerifiedAt === 'string'
+                  ? orderInput.paymentVerifiedAt
+                  : new Date().toISOString(),
+            }
+          : {}),
+      };
+
+      const existing = readOrders().filter(o => o.id !== newOrder.id);
+      const updated = [newOrder, ...existing].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      writeOrders(updated);
+      res.json({ order: newOrder, orders: updated, analytics: computeOrderAnalytics(updated) });
+    } catch (err) {
+      console.error('Manual order create error:', err);
+      res.status(500).json({ error: 'Unable to log manual order.' });
+    }
   });
 
   app.patch('/api/orders/:id/status', requireFounderAuth, (req, res) => {
@@ -688,12 +788,27 @@ async function createApp() {
 
   // ================= VITE DEV MIDDLEWARE OR PRODUCTION STATIC =================
   if (process.env.NODE_ENV !== 'production') {
-    const { createServer } = await import('vite');
-    const vite = await createServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
+    const vitePromise = import('vite').then(({ createServer }) =>
+      createServer({
+        server: {
+          middlewareMode: true,
+          ...(process.env.DISABLE_HMR === 'true' ? { hmr: false } : {}),
+        },
+        appType: 'spa',
+      })
+    );
+    vitePromise.catch(err => {
+      console.error('Failed to initialize Vite dev middleware:', err);
     });
-    app.use(vite.middlewares);
+
+    app.use(async (req, res, next) => {
+      try {
+        const vite = await vitePromise;
+        vite.middlewares(req, res, next);
+      } catch (err) {
+        next(err);
+      }
+    });
   } else {
     const distDir = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distDir));

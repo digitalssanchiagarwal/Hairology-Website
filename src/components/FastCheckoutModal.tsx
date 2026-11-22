@@ -15,14 +15,16 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Smartphone
+  Smartphone,
+  Copy
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import {
   USER_LOGO_IMAGE,
   USER_UPI_QR_IMAGE,
   USER_UPI_ID,
-  USER_UPI_NAME
+  USER_UPI_NAME,
+  ADMIN_PHONE
 } from '../data/products';
 import { lookupPincode } from '../data/pincodes';
 import { Order } from '../types';
@@ -61,10 +63,15 @@ export const FastCheckoutModal: React.FC = () => {
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [dynamicUpiQrUrl, setDynamicUpiQrUrl] = useState<string>('');
   const [useDynamicUpiQr, setUseDynamicUpiQr] = useState(true);
+  const [copiedUpi, setCopiedUpi] = useState(false);
 
   const grandTotal = Math.max(0, subtotal + shippingFee);
+  const isAboveQrAutoLimit = grandTotal > 2000;
   const orderNote = pendingOrder ? `Hairology #${pendingOrder.id}` : `Hairology Order Rs.${grandTotal}`;
-  const upiDeepLink = `upi://pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}&am=${grandTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
+  const amountQueryParam = isAboveQrAutoLimit ? '' : `&am=${grandTotal.toFixed(2)}`;
+  const upiDeepLink = `upi://pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
+  const gpayDeepLink = `gpay://upi/pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
+  const phonepeDeepLink = `phonepe://pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
 
   useEffect(() => {
     if (grandTotal > 0) {
@@ -218,8 +225,8 @@ export const FastCheckoutModal: React.FC = () => {
     };
 
     const buildClientFallbackOrder = (): Order => ({
-      id: `HR-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      createdAt: new Date().toISOString(),
+      id: pendingOrder?.id || `HR-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      createdAt: pendingOrder?.createdAt || new Date().toISOString(),
       customerPhone: customerFormattedPhone,
       deliveryAddress: addressPayload,
       items: [...items],
@@ -232,7 +239,8 @@ export const FastCheckoutModal: React.FC = () => {
       paymentStatus: 'PENDING',
       orderStatus: 'PENDING_CONFIRMATION',
       payerUpi: USER_UPI_ID,
-      trackingNumber: `DELHIVERY-AWB-${Math.floor(100000000 + Math.random() * 900000000)}`,
+      trackingNumber:
+        pendingOrder?.trackingNumber || `DELHIVERY-AWB-${Math.floor(100000000 + Math.random() * 900000000)}`,
     });
 
     try {
@@ -249,7 +257,8 @@ export const FastCheckoutModal: React.FC = () => {
             subtotal,
             discount: 0,
             shipping: shippingFee,
-            total: grandTotal
+            total: grandTotal,
+            existingOrderId: pendingOrder?.id
           })
         });
         const contentType = res.headers.get('content-type') || '';
@@ -277,8 +286,13 @@ export const FastCheckoutModal: React.FC = () => {
 
       try {
         await persistPendingOrderToFirestore(createdOrder);
-      } catch (firestoreErr) {
-        console.warn('Firestore order backup notice:', firestoreErr);
+      } catch (firstErr) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 400));
+          await persistPendingOrderToFirestore(createdOrder);
+        } catch (secondErr) {
+          console.warn('Firestore order backup notice:', firstErr, secondErr);
+        }
       }
 
       upsertOrder(createdOrder);
@@ -666,9 +680,33 @@ export const FastCheckoutModal: React.FC = () => {
                     </span>
                   </div>
                   <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-2.5 py-0.5 rounded-full">
-                    ₹{grandTotal} AUTO-FILLS
+                    {isAboveQrAutoLimit ? 'SUPPORTS UP TO ₹1,00,000' : `₹${grandTotal} AUTO-FILLS`}
                   </span>
                 </div>
+
+                {isAboveQrAutoLimit && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-2">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                      <span>Orders Above ₹2,000 — Enter ₹{grandTotal} Manually in UPI App</span>
+                    </div>
+                    <p className="leading-relaxed text-amber-800">
+                      Indian UPI guidelines cap auto-filled QR codes at ₹2,000. Scan this QR or tap an app below, then type <strong>₹{grandTotal}</strong> inside Google Pay / PhonePe / Paytm (supports up to ₹1,00,000).
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(USER_UPI_ID).catch(() => {});
+                        setCopiedUpi(true);
+                        setTimeout(() => setCopiedUpi(false), 2000);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-amber-100 text-[#121110] border border-amber-300 rounded-lg font-mono font-bold text-[11px] cursor-pointer transition-colors"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>{copiedUpi ? `Copied ${USER_UPI_ID}!` : `Copy UPI ID: ${USER_UPI_ID}`}</span>
+                    </button>
+                  </div>
+                )}
 
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                   <div className="shrink-0 flex flex-col items-center">
@@ -679,7 +717,7 @@ export const FastCheckoutModal: React.FC = () => {
                         className="w-40 h-40 object-contain rounded-lg"
                       />
                       <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 bg-[#121110] text-[#C5A880] text-[9px] font-mono font-bold px-2.5 py-0.5 rounded-full border border-[#C5A880]/40 whitespace-nowrap shadow">
-                        ₹{grandTotal} AUTO-LOCKED
+                        {isAboveQrAutoLimit ? `ENTER ₹${grandTotal} IN APP` : `₹${grandTotal} AUTO-LOCKED`}
                       </span>
                     </div>
                     <button
@@ -687,7 +725,11 @@ export const FastCheckoutModal: React.FC = () => {
                       onClick={() => setUseDynamicUpiQr(!useDynamicUpiQr)}
                       className="text-[10px] font-mono font-bold text-[#121110] mt-4 bg-[#F4EFEB] hover:bg-[#E8DFD1] px-2.5 py-1 rounded-full border border-[#E8DFD1] cursor-pointer transition-colors"
                     >
-                      {useDynamicUpiQr ? 'View Original GPay QR Card' : `Switch to Auto-Fill ₹${grandTotal} QR`}
+                      {useDynamicUpiQr
+                        ? 'View Original GPay QR Card'
+                        : isAboveQrAutoLimit
+                          ? 'Switch to Open-Amount QR'
+                          : `Switch to Auto-Fill ₹${grandTotal} QR`}
                     </button>
                   </div>
 
@@ -697,12 +739,20 @@ export const FastCheckoutModal: React.FC = () => {
                     </div>
 
                     <p className="text-[11px] text-[#4B5563] leading-relaxed">
-                      Scan this QR with <strong>Google Pay, PhonePe, Paytm, or BHIM</strong>. Your cart total of <strong>₹{grandTotal}</strong> appears automatically on your phone ready to pay.
+                      {isAboveQrAutoLimit ? (
+                        <>
+                          Scan this QR with <strong>Google Pay, PhonePe, Paytm, or BHIM</strong> and enter your total of <strong>₹{grandTotal}</strong>. Works smoothly for orders above ₹2,000.
+                        </>
+                      ) : (
+                        <>
+                          Scan this QR with <strong>Google Pay, PhonePe, Paytm, or BHIM</strong>. Your cart total of <strong>₹{grandTotal}</strong> appears automatically on your phone ready to pay.
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
 
-                {/* Direct 1-tap UPI app buttons (pre-fills cart amount) */}
+                {/* Direct 1-tap UPI app buttons */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                   <a
                     href={upiDeepLink}
@@ -712,13 +762,13 @@ export const FastCheckoutModal: React.FC = () => {
                     <span>Any UPI App (₹{grandTotal})</span>
                   </a>
                   <a
-                    href={`gpay://upi/pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}&am=${grandTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(orderNote)}`}
+                    href={gpayDeepLink}
                     className="py-2.5 px-3 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-[#E8DFD1]"
                   >
                     <span>Google Pay (₹{grandTotal})</span>
                   </a>
                   <a
-                    href={`phonepe://pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}&am=${grandTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(orderNote)}`}
+                    href={phonepeDeepLink}
                     className="py-2.5 px-3 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-[#E8DFD1]"
                   >
                     <span>PhonePe (₹{grandTotal})</span>
@@ -735,13 +785,26 @@ export const FastCheckoutModal: React.FC = () => {
               ) : (
                 <div className="p-4 bg-[#121110] text-[#FDFBF7] rounded-2xl border border-[#C5A880]/40 flex items-start gap-3">
                   <Clock className="w-5 h-5 text-[#C5A880] shrink-0 mt-0.5 animate-pulse" />
-                  <div className="text-xs space-y-1">
+                  <div className="text-xs space-y-2 flex-1">
                     <div className="font-bold text-[#C5A880]">
                       Waiting to Receive Payment for Order #{pendingOrder?.id} (₹{grandTotal})
                     </div>
                     <p className="text-[11px] text-[#E8DFD1]/85 leading-relaxed">
                       Please stay on this page after paying. As soon as your payment is confirmed, this page will check out automatically and display your Thank You message.
                     </p>
+                    {pendingOrder && (
+                      <a
+                        href={`https://wa.me/${ADMIN_PHONE.replace(/\D/g, '')}?text=${encodeURIComponent(
+                          `Hi Hairology! I have placed Order #${pendingOrder.id} for ₹${grandTotal} (${recipientName}, +91 ${getCustomerPhoneDigits(phone)}). Please confirm my UPI payment.`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold text-[11px] rounded-lg transition-colors"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span>Share Order #{pendingOrder.id} on WhatsApp for Fast Confirmation</span>
+                      </a>
+                    )}
                   </div>
                 </div>
               )}

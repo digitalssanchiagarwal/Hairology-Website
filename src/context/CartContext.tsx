@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { CartItem, AppliedCoupon, Order, OrderAnalytics, ProductSalesMetric } from '../types';
-import { PRODUCTS, PRODUCT_IMAGE_DUO, ADMIN_PHONE } from '../data/products';
+import { PRODUCTS, PRODUCT_IMAGE_DUO, ADMIN_PHONE, USER_UPI_ID } from '../data/products';
 import {
   subscribeToFirebaseAuth,
   isAuthorizedFirebaseAdmin,
@@ -12,7 +12,8 @@ import {
   verifyOrderPaidInFirestore,
   markOrderFailedInFirestore,
   updateOrderDeliveryStatusInFirestore,
-  clearAllOrdersInFirestore
+  clearAllOrdersInFirestore,
+  createManualOrderInFirestore
 } from '../firebase';
 
 async function safeParseJson(res: Response): Promise<Record<string, unknown> | null> {
@@ -119,6 +120,21 @@ interface CartContextType {
     reason: string,
     founderAuth: FounderAuthHeaders
   ) => Promise<{ ok: boolean; message?: string }>;
+  founderCreateManualOrder: (
+    payload: {
+      recipientName: string;
+      phoneNumber: string;
+      streetAddress?: string;
+      city?: string;
+      state?: string;
+      pincode?: string;
+      items: CartItem[];
+      total: number;
+      utrRef?: string;
+      paymentStatus: 'PAID' | 'PENDING';
+    },
+    founderAuth: FounderAuthHeaders
+  ) => Promise<{ ok: boolean; order?: Order; message?: string }>;
   founderResetAllOrders: (
     founderAuth: FounderAuthHeaders
   ) => Promise<{ ok: boolean; message?: string }>;
@@ -768,6 +784,126 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [isFirebaseCloudConnected, firestoreOrders]
   );
 
+  const founderCreateManualOrder = useCallback(
+    async (
+      payload: {
+        recipientName: string;
+        phoneNumber: string;
+        streetAddress?: string;
+        city?: string;
+        state?: string;
+        pincode?: string;
+        items: CartItem[];
+        total: number;
+        utrRef?: string;
+        paymentStatus: 'PAID' | 'PENDING';
+      },
+      founderAuth: FounderAuthHeaders
+    ): Promise<{ ok: boolean; order?: Order; message?: string }> => {
+      const cleanName = payload.recipientName.trim();
+      const digits = payload.phoneNumber.replace(/\D/g, '');
+      const cleanDigits = digits.length > 10 ? digits.slice(-10) : digits;
+      const formattedPhone = cleanDigits.length === 10 ? `+91 ${cleanDigits}` : payload.phoneNumber.trim();
+      const total = Math.round(Number(payload.total) || 0);
+
+      if (!cleanName || cleanDigits.length < 10 || !Number.isFinite(total) || total <= 0 || payload.items.length === 0) {
+        return {
+          ok: false,
+          message: 'Please enter customer name, 10-digit mobile number, product, and amount (> ₹0).',
+        };
+      }
+
+      const isPaid = payload.paymentStatus === 'PAID';
+      const nowIso = new Date().toISOString();
+      const cleanPincode = (payload.pincode || '400001').replace(/\D/g, '').slice(0, 6).padEnd(6, '0');
+      const effectiveRef = payload.utrRef?.trim() || (isPaid ? `UPI-RCVD-${Date.now().toString().slice(-6)}` : undefined);
+
+      const newOrder: Order = {
+        id: `HR-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        createdAt: nowIso,
+        customerPhone: formattedPhone,
+        deliveryAddress: {
+          recipientName: cleanName,
+          phoneNumber: formattedPhone,
+          streetAddress: payload.streetAddress?.trim() || 'Direct UPI Order',
+          city: payload.city?.trim() || 'India',
+          state: payload.state?.trim() || 'India',
+          pincode: cleanPincode,
+        },
+        items: payload.items,
+        subtotal: total,
+        discount: 0,
+        shipping: 0,
+        codFee: 0,
+        total,
+        paymentMethod: 'UPI_QR',
+        paymentStatus: isPaid ? 'PAID' : 'PENDING',
+        orderStatus: isPaid ? 'CONFIRMED' : 'PENDING_CONFIRMATION',
+        payerUpi: USER_UPI_ID,
+        trackingNumber: `DELHIVERY-AWB-${Math.floor(100000000 + Math.random() * 900000000)}`,
+        ...(isPaid
+          ? {
+              gatewayTransactionId: effectiveRef,
+              paymentVerifiedAt: nowIso,
+            }
+          : {}),
+      };
+
+      if (isFirebaseCloudConnected) {
+        try {
+          await createManualOrderInFirestore(newOrder);
+        } catch (err) {
+          return {
+            ok: false,
+            message: err instanceof Error ? err.message : 'Could not save order to Firebase Firestore.',
+          };
+        }
+      }
+
+      try {
+        const res = await fetch('/api/orders/manual-create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-founder-email': founderAuth.email,
+            'x-founder-code': founderAuth.code,
+          },
+          body: JSON.stringify({ order: newOrder }),
+        });
+        const data = await safeParseJson(res);
+        if (data !== null) {
+          if (!res.ok) {
+            if (!isFirebaseCloudConnected) {
+              return {
+                ok: false,
+                message: typeof data.error === 'string' ? data.error : 'Could not record order on server.',
+              };
+            }
+          } else if (Array.isArray(data.orders)) {
+            setOrders(prev => mergeOrderLists(firestoreOrders, mergeOrderLists(data.orders as Order[], prev)));
+            setServerAnalytics((data.analytics as OrderAnalytics) || null);
+            return {
+              ok: true,
+              order: (data.order as Order) || newOrder,
+              message: `Order #${newOrder.id} (₹${newOrder.total}) recorded as ${newOrder.paymentStatus}!`,
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Manual order server fallback notice:', err);
+      }
+
+      setServerAnalytics(null);
+      setOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
+      return {
+        ok: true,
+        order: newOrder,
+        message: `Order #${newOrder.id} (₹${newOrder.total}) recorded as ${newOrder.paymentStatus}!`,
+      };
+    },
+    [isFirebaseCloudConnected, firestoreOrders]
+  );
+
   const founderResetAllOrders = useCallback(
     async (founderAuth: FounderAuthHeaders): Promise<{ ok: boolean; message?: string }> => {
       try {
@@ -863,6 +999,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateOrderStatus,
         founderVerifyUpiPayment,
         founderMarkPaymentFailed,
+        founderCreateManualOrder,
         founderResetAllOrders,
         recentAdminAlert,
         clearAdminAlert,
