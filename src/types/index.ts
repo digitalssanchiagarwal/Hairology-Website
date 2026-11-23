@@ -92,7 +92,7 @@ export interface Order {
   codFee: number;
   total: number;
   couponApplied?: string;
-  paymentMethod: 'UPI_QR' | 'UPI';
+  paymentMethod: 'UPI_QR' | 'UPI' | 'CARD' | 'NETBANKING';
   paymentStatus: 'PAID' | 'PENDING' | 'FAILED' | 'REFUNDED';
   orderStatus:
     | 'PENDING_CONFIRMATION'
@@ -107,6 +107,7 @@ export interface Order {
   trackingNumber?: string;
   payerName?: string;
   payerUpi?: string;
+  paymentDetailNote?: string;
   paymentInitiated?: boolean;
 }
 

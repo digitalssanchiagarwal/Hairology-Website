@@ -119,6 +119,7 @@ export const AdminDispatchModal: React.FC = () => {
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [whatsappToast, setWhatsappToast] = useState<string | null>(null);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [apiLoadError, setApiLoadError] = useState<string | null>(null);
   const [isVerifyingUtr, setIsVerifyingUtr] = useState(false);
   const [isMarkingFailed, setIsMarkingFailed] = useState(false);
   const [isDeletingUnpaid, setIsDeletingUnpaid] = useState(false);
@@ -149,17 +150,23 @@ export const AdminDispatchModal: React.FC = () => {
     setSelectedOrderId(orderId);
   };
 
-  // Fetch live server orders whenever authenticated panel opens, and auto-refresh every 3 seconds
+  // Fetch live server orders & payment config whenever authenticated panel opens, and auto-refresh every 3 seconds
   useEffect(() => {
     if (!isAdminOpen || !isAuthenticated || !savedCreds) return;
 
     setIsLoadingOrders(true);
-    fetchFounderOrders(savedCreds.email, savedCreds.code).finally(() => {
-      setIsLoadingOrders(false);
-    });
+    fetchFounderOrders(savedCreds.email, savedCreds.code)
+      .then(res => {
+        setApiLoadError(res.ok ? null : res.error || 'Could not load orders.');
+      })
+      .finally(() => {
+        setIsLoadingOrders(false);
+      });
 
     const interval = setInterval(() => {
-      void fetchFounderOrders(savedCreds.email, savedCreds.code);
+      void fetchFounderOrders(savedCreds.email, savedCreds.code).then(res => {
+        if (res.ok) setApiLoadError(null);
+      });
     }, 3000);
 
     return () => clearInterval(interval);
@@ -385,15 +392,15 @@ export const AdminDispatchModal: React.FC = () => {
     const res = await fetchFounderOrders(savedCreds.email, savedCreds.code);
     setIsLoadingOrders(false);
     if (res.ok) {
-      showToast('Live UPI orders & sales analytics refreshed!');
+      setApiLoadError(null);
+      showToast('Live orders & sales analytics refreshed!');
     } else {
+      setApiLoadError(res.error || 'Could not refresh orders.');
       showToast(res.error || 'Could not refresh orders.');
     }
   };
 
-  const visibleOrders = orders.filter(
-    ord => ord.paymentStatus === 'PAID' || ord.paymentInitiated !== false
-  );
+  const visibleOrders = orders;
 
   const awaitingPaymentCount = visibleOrders.filter(
     ord => ord.paymentStatus !== 'PAID' && ord.paymentStatus !== 'FAILED' && ord.orderStatus !== 'PAYMENT_FAILED'
@@ -915,6 +922,13 @@ export const AdminDispatchModal: React.FC = () => {
           </div>
         )}
 
+        {apiLoadError && (
+          <div className="bg-amber-950/90 text-amber-200 text-xs py-2 px-4 text-center border-b border-amber-500/40 flex items-center justify-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{apiLoadError}</span>
+          </div>
+        )}
+
         {/* ================= TAB 1: EXECUTIVE ANALYTICS + CUSTOMER ORDERS & DELIVERY ================= */}
         {activeTab === 'orders' && (
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
@@ -1264,6 +1278,7 @@ export const AdminDispatchModal: React.FC = () => {
                       <div><strong>Phone Number:</strong> <span className="font-mono text-emerald-400">{selectedOrder.customerPhone}</span></div>
                       <div><strong>Delivery Address:</strong> {selectedOrder.deliveryAddress.streetAddress}, {selectedOrder.deliveryAddress.city} - {selectedOrder.deliveryAddress.pincode} ({selectedOrder.deliveryAddress.state})</div>
                       <div><strong>Billing Breakdown:</strong> Subtotal ₹{selectedOrder.subtotal} • Shipping {selectedOrder.shipping === 0 ? 'FREE' : `₹${selectedOrder.shipping}`} • Total <strong className="text-[#C5A880]">₹{selectedOrder.total}</strong></div>
+                      <div><strong>Payment Method:</strong> <span className="font-mono text-[#C5A880]">{selectedOrder.paymentMethod}</span>{selectedOrder.paymentDetailNote ? <span className="text-[#E8DFD1]/85"> ({selectedOrder.paymentDetailNote})</span> : null}</div>
                       <div><strong>AWB Tracking:</strong> <span className="font-mono text-[#C5A880]">{selectedOrder.trackingNumber}</span></div>
                       <div><strong>Order Timestamp:</strong> {new Date(selectedOrder.createdAt).toLocaleString('en-IN')}</div>
                     </div>
@@ -1716,9 +1731,9 @@ export const AdminDispatchModal: React.FC = () => {
               </p>
 
               <div className="bg-[#121110] p-4 rounded-xl border border-[#C5A880]/30 font-mono text-xs text-[#C5A880] space-y-1 select-all">
-                <div className="text-[#8A7463]">// Live Order Notification Payload ({ADMIN_PHONE}):</div>
+                <div className="text-[#8A7463]">Live Order Notification Preview ({ADMIN_PHONE}):</div>
                 <div className="text-emerald-400">🛍️ HAIROLOGY ORDER DETAILS: #{selectedOrder?.id || 'HR-2026-0001'}</div>
-                <div>UPI Ref: {selectedOrder?.gatewayTransactionId || 'Pending'}</div>
+                <div>Payment Method: {selectedOrder?.paymentMethod || 'UPI_QR'}</div>
                 <div>Total: ₹{selectedOrder?.total || 1299} ({selectedOrder?.paymentStatus || 'PAID'})</div>
                 <div>Customer: {selectedOrder?.deliveryAddress.recipientName || 'Customer Name'} ({selectedOrder?.customerPhone || '+91 XXXXXXXXXX'})</div>
               </div>

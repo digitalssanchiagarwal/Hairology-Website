@@ -552,28 +552,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       });
       const data = await safeParseJson(res);
-      if (data !== null) {
-        if (!res.ok) {
-          return { ok: false, error: typeof data.error === 'string' ? data.error : 'Failed to fetch live orders.' };
-        }
-        if (Array.isArray(data.orders)) {
-          const { merged, needsServerHeal } = mergeAuthoritativeOrders(
-            data.orders as Order[],
-            ordersRef.current
-          );
-          setOrders(merged);
+      if (data === null) {
+        return {
+          ok: false,
+          error: 'Orders server is unavailable on this static deployment. Deploy with Vercel serverless /api or Node server (npm start).',
+        };
+      }
+      if (!res.ok) {
+        return { ok: false, error: typeof data.error === 'string' ? data.error : 'Failed to fetch live orders.' };
+      }
+      if (Array.isArray(data.orders)) {
+        const { merged, needsServerHeal } = mergeAuthoritativeOrders(
+          data.orders as Order[],
+          ordersRef.current
+        );
+        setOrders(merged);
 
-          if (needsServerHeal.length > 0) {
-            void fetch('/api/orders/sync-cloud', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-founder-email': email,
-                'x-founder-code': code,
-              },
-              body: JSON.stringify({ orders: needsServerHeal }),
-            }).catch(() => {});
-          }
+        if (needsServerHeal.length > 0) {
+          void fetch('/api/orders/sync-cloud', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-founder-email': email,
+              'x-founder-code': code,
+            },
+            body: JSON.stringify({ orders: needsServerHeal }),
+          }).catch(() => {});
         }
       }
       return { ok: true };

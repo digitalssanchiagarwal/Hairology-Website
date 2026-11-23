@@ -23,8 +23,7 @@ import {
   USER_LOGO_IMAGE,
   USER_UPI_QR_IMAGE,
   USER_UPI_ID,
-  USER_UPI_NAME,
-  ADMIN_PHONE
+  USER_UPI_NAME
 } from '../data/products';
 import { lookupPincode } from '../data/pincodes';
 import { Order } from '../types';
@@ -68,11 +67,12 @@ export const FastCheckoutModal: React.FC = () => {
   const upiDeepLink = `upi://pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
   const gpayDeepLink = `gpay://upi/pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
   const phonepeDeepLink = `phonepe://pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
+  const paytmDeepLink = `paytmmp://pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
 
   useEffect(() => {
     if (grandTotal > 0) {
       QRCode.toDataURL(upiDeepLink, {
-        width: 360,
+        width: 520,
         margin: 2,
         color: { dark: '#121110', light: '#FFFFFF' },
         errorCorrectionLevel: 'M'
@@ -257,6 +257,7 @@ export const FastCheckoutModal: React.FC = () => {
         createdOrder = buildClientFallbackOrder();
       }
 
+      upsertOrder(createdOrder);
       setPendingOrder(createdOrder);
       setCheckoutStep(2);
     } catch {
@@ -266,10 +267,11 @@ export const FastCheckoutModal: React.FC = () => {
     }
   };
 
-  const markPaymentInitiated = async () => {
+  const markPaymentInitiated = async (method: 'UPI_QR' | 'UPI' = 'UPI_QR') => {
     if (!pendingOrder) return;
     const updatedOrder: Order = {
       ...pendingOrder,
+      paymentMethod: method,
       paymentInitiated: true,
     };
     setPendingOrder(updatedOrder);
@@ -279,7 +281,7 @@ export const FastCheckoutModal: React.FC = () => {
       await fetch(`/api/orders/${encodeURIComponent(pendingOrder.id)}/payment-initiated`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ paymentMethod: method }),
       });
     } catch {
       // ignore transient network error
@@ -651,114 +653,133 @@ export const FastCheckoutModal: React.FC = () => {
                 </button>
               </div>
 
-              {/* CONNECTED AUTO-AMOUNT UPI SCANNER */}
-              <div className="bg-white rounded-2xl border-2 border-[#121110] shadow-sm overflow-hidden p-4 sm:p-5 space-y-4">
-                <div className="flex items-center justify-between border-b border-[#E8DFD1] pb-3">
+              {/* 1. PRIMARY PAYMENT OPTION: PAY BY ANY UPI APP */}
+              <div className="bg-white rounded-2xl border-2 border-[#121110] shadow-sm overflow-hidden p-4 sm:p-5 space-y-3.5">
+                <div className="flex items-center justify-between border-b border-[#E8DFD1] pb-2.5">
                   <div className="flex items-center gap-2">
-                    <QrCode className="w-4 h-4 text-emerald-700" />
+                    <Smartphone className="w-4 h-4 text-[#121110]" />
                     <span className="text-xs font-bold uppercase tracking-wider text-[#121110]">
-                      Scan &amp; Pay Exact Cart Total (₹{grandTotal})
+                      1. Pay by Any UPI App
                     </span>
                   </div>
-                  <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-2.5 py-0.5 rounded-full">
-                    {isAboveQrAutoLimit ? 'SUPPORTS UP TO ₹1,00,000' : `₹${grandTotal} AUTO-FILLS`}
+                  <span className="text-[11px] font-semibold text-emerald-700">
+                    Primary Option · Instant
+                  </span>
+                </div>
+
+                <a
+                  href={upiDeepLink}
+                  onClick={() => void markPaymentInitiated('UPI')}
+                  className="w-full py-3.5 px-4 bg-[#121110] hover:bg-[#2A2724] text-[#C5A880] hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow cursor-pointer tabular-nums"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span>Pay ₹{grandTotal} by Any UPI App</span>
+                  <ArrowRight className="w-4 h-4" />
+                </a>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <a
+                    href={gpayDeepLink}
+                    onClick={() => void markPaymentInitiated('UPI')}
+                    className="py-2.5 px-2 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-[11px] font-bold flex items-center justify-center transition-colors border border-[#E8DFD1] whitespace-nowrap"
+                  >
+                    Google Pay
+                  </a>
+                  <a
+                    href={phonepeDeepLink}
+                    onClick={() => void markPaymentInitiated('UPI')}
+                    className="py-2.5 px-2 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-[11px] font-bold flex items-center justify-center transition-colors border border-[#E8DFD1] whitespace-nowrap"
+                  >
+                    PhonePe
+                  </a>
+                  <a
+                    href={paytmDeepLink}
+                    onClick={() => void markPaymentInitiated('UPI')}
+                    className="py-2.5 px-2 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-[11px] font-bold flex items-center justify-center transition-colors border border-[#E8DFD1] whitespace-nowrap"
+                  >
+                    Paytm / BHIM
+                  </a>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-[#6B7280]">
+                  <span className="font-mono truncate">UPI ID: {USER_UPI_ID}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(USER_UPI_ID).catch(() => {});
+                      setCopiedUpi(true);
+                      setTimeout(() => setCopiedUpi(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-[#FAF7F2] hover:bg-[#E8DFD1] text-[#121110] border border-[#E8DFD1] rounded-lg font-mono font-semibold text-[10px] cursor-pointer shrink-0 transition-colors"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>{copiedUpi ? 'Copied!' : 'Copy UPI ID'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. SECOND-DEVICE PAYMENT: LARGER QR CODE SCANNER */}
+              <div className="bg-white rounded-2xl border border-[#E8DFD1] shadow-sm overflow-hidden p-4 sm:p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-[#E8DFD1] pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <QrCode className="w-4 h-4 text-[#121110]" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#121110]">
+                      2. Scan QR Code
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-medium text-[#6B7280]">
+                    For customers using a second device
                   </span>
                 </div>
 
                 {isAboveQrAutoLimit && (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-2">
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1.5">
                     <div className="font-bold flex items-center gap-1.5">
                       <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                      <span>Orders Above ₹2,000 — Enter ₹{grandTotal} Manually in UPI App</span>
+                      <span>Orders Above ₹2,000 — Enter ₹{grandTotal} Manually After Scanning</span>
                     </div>
                     <p className="leading-relaxed text-amber-800">
-                      Indian UPI guidelines cap auto-filled QR codes at ₹2,000. Scan this QR or tap an app below, then type <strong>₹{grandTotal}</strong> inside Google Pay / PhonePe / Paytm (supports up to ₹1,00,000).
+                      Indian UPI limits auto-filled QR codes at ₹2,000. Scan with your second phone and type <strong>₹{grandTotal}</strong> inside your UPI app.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard?.writeText(USER_UPI_ID).catch(() => {});
-                        setCopiedUpi(true);
-                        setTimeout(() => setCopiedUpi(false), 2000);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-amber-100 text-[#121110] border border-amber-300 rounded-lg font-mono font-bold text-[11px] cursor-pointer transition-colors"
-                    >
-                      <Copy className="w-3 h-3" />
-                      <span>{copiedUpi ? `Copied ${USER_UPI_ID}!` : `Copy UPI ID: ${USER_UPI_ID}`}</span>
-                    </button>
                   </div>
                 )}
 
-                <div className="flex flex-col sm:flex-row items-center gap-4">
-                  <div className="shrink-0 flex flex-col items-center">
-                    <div className="relative p-2 bg-white rounded-xl border-2 border-[#121110] shadow-sm">
-                      <img
-                        src={useDynamicUpiQr && dynamicUpiQrUrl ? dynamicUpiQrUrl : USER_UPI_QR_IMAGE}
-                        alt={`Scan to pay ₹${grandTotal} to ${USER_UPI_ID}`}
-                        className="w-40 h-40 object-contain rounded-lg"
-                      />
-                      <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 bg-[#121110] text-[#C5A880] text-[9px] font-mono font-bold px-2.5 py-0.5 rounded-full border border-[#C5A880]/40 whitespace-nowrap shadow">
-                        {isAboveQrAutoLimit ? `ENTER ₹${grandTotal} IN APP` : `₹${grandTotal} AUTO-LOCKED`}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setUseDynamicUpiQr(!useDynamicUpiQr)}
-                      className="text-[10px] font-mono font-bold text-[#121110] mt-4 bg-[#F4EFEB] hover:bg-[#E8DFD1] px-2.5 py-1 rounded-full border border-[#E8DFD1] cursor-pointer transition-colors"
-                    >
-                      {useDynamicUpiQr
-                        ? 'View Original GPay QR Card'
-                        : isAboveQrAutoLimit
-                          ? 'Switch to Open-Amount QR'
-                          : `Switch to Auto-Fill ₹${grandTotal} QR`}
-                    </button>
+                <div className="flex flex-col items-center text-center space-y-3">
+                  <div className="relative p-3 bg-white rounded-2xl border-2 border-[#121110] shadow-md">
+                    <img
+                      src={useDynamicUpiQr && dynamicUpiQrUrl ? dynamicUpiQrUrl : USER_UPI_QR_IMAGE}
+                      alt={`Scan to pay ₹${grandTotal} to ${USER_UPI_ID}`}
+                      className="w-56 h-56 sm:w-64 sm:h-64 object-contain rounded-lg"
+                    />
+                    <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-[#121110] text-[#C5A880] text-[10px] font-mono font-bold px-3 py-1 rounded-full border border-[#C5A880]/40 whitespace-nowrap shadow tabular-nums">
+                      {isAboveQrAutoLimit ? `ENTER ₹${grandTotal} IN APP` : `PAY ₹${grandTotal} · HAIROLOGY`}
+                    </span>
                   </div>
 
-                  <div className="flex-1 space-y-2.5 text-center sm:text-left">
-                    <div className="font-serif text-lg font-bold text-[#121110]">
-                      HAIROLOGY • Official UPI
-                    </div>
+                  <p className="text-xs text-[#4B5563] leading-relaxed max-w-sm pt-2">
+                    {isAboveQrAutoLimit ? (
+                      <>
+                        Open Google Pay, PhonePe, Paytm, or BHIM on your second phone, scan this QR code, and enter <strong>₹{grandTotal}</strong>.
+                      </>
+                    ) : (
+                      <>
+                        Open Google Pay, PhonePe, Paytm, or BHIM on your second phone and scan this larger QR code. <strong>₹{grandTotal}</strong> loads automatically.
+                      </>
+                    )}
+                  </p>
 
-                    <p className="text-[11px] text-[#4B5563] leading-relaxed">
-                      {isAboveQrAutoLimit ? (
-                        <>
-                          Scan this QR with <strong>Google Pay, PhonePe, Paytm, or BHIM</strong> and enter your total of <strong>₹{grandTotal}</strong>. Works smoothly for orders above ₹2,000.
-                        </>
-                      ) : (
-                        <>
-                          Scan this QR with <strong>Google Pay, PhonePe, Paytm, or BHIM</strong>. Your cart total of <strong>₹{grandTotal}</strong> appears automatically on your phone ready to pay.
-                        </>
-                      )}
-                    </p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUseDynamicUpiQr(!useDynamicUpiQr)}
+                    className="text-[11px] font-mono font-semibold text-[#121110] bg-[#F4EFEB] hover:bg-[#E8DFD1] px-3 py-1.5 rounded-lg border border-[#E8DFD1] cursor-pointer transition-colors"
+                  >
+                    {useDynamicUpiQr
+                      ? 'View Original GPay QR Card'
+                      : isAboveQrAutoLimit
+                        ? 'Switch to Open-Amount QR'
+                        : `Switch to Auto-Fill ₹${grandTotal} QR`}
+                  </button>
                 </div>
-
-                {/* Direct 1-tap UPI app buttons */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                  <a
-                    href={upiDeepLink}
-                    onClick={() => void markPaymentInitiated()}
-                    className="py-2.5 px-3 bg-[#121110] hover:bg-[#2A2724] text-[#C5A880] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow cursor-pointer"
-                  >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Any UPI App (₹{grandTotal})</span>
-                  </a>
-                  <a
-                    href={gpayDeepLink}
-                    onClick={() => void markPaymentInitiated()}
-                    className="py-2.5 px-3 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-[#E8DFD1]"
-                  >
-                    <span>Google Pay (₹{grandTotal})</span>
-                  </a>
-                  <a
-                    href={phonepeDeepLink}
-                    onClick={() => void markPaymentInitiated()}
-                    className="py-2.5 px-3 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-[#E8DFD1]"
-                  >
-                    <span>PhonePe (₹{grandTotal})</span>
-                  </a>
-                </div>
-
               </div>
 
               {/* Awaiting Founder Confirmation Notice (No self-claim or auto-confirm) */}
@@ -769,28 +790,14 @@ export const FastCheckoutModal: React.FC = () => {
                 </div>
               ) : (
                 <div className="p-4 bg-[#121110] text-[#FDFBF7] rounded-2xl border border-[#C5A880]/40 flex items-start gap-3">
-                  <Clock className="w-5 h-5 text-[#C5A880] shrink-0 mt-0.5 animate-pulse" />
-                  <div className="text-xs space-y-2 flex-1">
+                  <Clock className="w-5 h-5 text-[#C5A880] shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1 flex-1">
                     <div className="font-bold text-[#C5A880]">
-                      Scan &amp; Pay ₹{grandTotal} for Order #{pendingOrder?.id}
+                      Order #{pendingOrder?.id} — Pay ₹{grandTotal} via UPI &amp; Await Confirmation
                     </div>
                     <p className="text-[11px] text-[#E8DFD1]/85 leading-relaxed">
-                      Scan the QR code or use a UPI app above to complete payment. Your order will be confirmed only after Hairology verifies that your payment has been received.
+                      Pay directly to <strong>{USER_UPI_ID}</strong> using Any UPI App or the Second-Device QR Scanner above. This screen updates automatically once Hairology verifies payment receipt.
                     </p>
-                    {pendingOrder && (
-                      <a
-                        href={`https://wa.me/${ADMIN_PHONE.replace(/\D/g, '')}?text=${encodeURIComponent(
-                          `Hi Hairology! I have paid ₹${grandTotal} for Order #${pendingOrder.id} (${recipientName}, +91 ${getCustomerPhoneDigits(phone)}). Please confirm my order.`
-                        )}`}
-                        onClick={() => void markPaymentInitiated()}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold text-[11px] rounded-lg transition-colors"
-                      >
-                        <Share2 className="w-3.5 h-3.5" />
-                        <span>Share Order #{pendingOrder.id} on WhatsApp for Fast Confirmation</span>
-                      </a>
-                    )}
                   </div>
                 </div>
               )}
