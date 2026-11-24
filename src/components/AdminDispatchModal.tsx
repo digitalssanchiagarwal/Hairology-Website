@@ -27,8 +27,7 @@ import {
   Phone,
   User,
   Trash2,
-  Cloud,
-  CloudOff
+  Plus
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { ADMIN_PHONE, PRODUCTS, USER_UPI_ID } from '../data/products';
@@ -95,14 +94,9 @@ export const AdminDispatchModal: React.FC = () => {
     updateOrderStatus,
     founderVerifyUpiPayment,
     founderMarkPaymentFailed,
+    founderCreateManualOrder,
     founderDeleteUnpaidOrder,
-    founderClearUnpaidOrders,
-    firebaseUser,
-    isCloudSyncActive,
-    cloudSyncError,
-    isConnectingCloudSync,
-    connectGoogleCloudSync,
-    disconnectGoogleCloudSync
+    founderClearUnpaidOrders
   } = useCart();
 
   // Two-Step Authentication Gate State (Gmail -> Access Code)
@@ -136,6 +130,17 @@ export const AdminDispatchModal: React.FC = () => {
   const [whatsappPromptDoneIds, setWhatsappPromptDoneIds] = useState<string[]>(() =>
     readWhatsappPromptDoneIds()
   );
+  const [showAddOrderForm, setShowAddOrderForm] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualAddress, setManualAddress] = useState('');
+  const [manualCity, setManualCity] = useState('');
+  const [manualState, setManualState] = useState('');
+  const [manualPincode, setManualPincode] = useState('');
+  const [manualProductId, setManualProductId] = useState(PRODUCTS[0]?.id || 'the-trio');
+  const [manualAmount, setManualAmount] = useState(String(PRODUCTS[0]?.variants[0]?.price || 1299));
+  const [isSavingManual, setIsSavingManual] = useState(false);
+  const [manualFormError, setManualFormError] = useState<string | null>(null);
 
   const markWhatsappPromptDone = (orderId: string) => {
     setWhatsappPromptDoneIds(prev => {
@@ -158,7 +163,7 @@ export const AdminDispatchModal: React.FC = () => {
     setSelectedOrderId(orderId);
   };
 
-  // Fetch live server orders & payment config whenever authenticated panel opens, and auto-refresh every 3 seconds
+  // Fetch live server orders whenever authenticated panel opens, on tab focus, and auto-refresh every 2 seconds
   useEffect(() => {
     if (!isAdminOpen || !isAuthenticated || !savedCreds) return;
 
@@ -171,20 +176,25 @@ export const AdminDispatchModal: React.FC = () => {
         setIsLoadingOrders(false);
       });
 
-    const interval = setInterval(() => {
+    const syncNow = () => {
       void fetchFounderOrders(savedCreds.email, savedCreds.code).then(res => {
         if (res.ok) setApiLoadError(null);
       });
-    }, 3000);
+    };
 
-    return () => clearInterval(interval);
+    const interval = setInterval(syncNow, 2000);
+    const handleVisibility = () => {
+      if (!document.hidden) syncNow();
+    };
+    window.addEventListener('focus', syncNow);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', syncNow);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [isAdminOpen, isAuthenticated, savedCreds, fetchFounderOrders]);
-
-  useEffect(() => {
-    if (isCloudSyncActive) {
-      setApiLoadError(null);
-    }
-  }, [isCloudSyncActive]);
 
   // Reset to 2-step verification gate whenever Founder Panel is opened via URL or search
   useEffect(() => {
@@ -804,6 +814,19 @@ export const AdminDispatchModal: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => {
+                setManualFormError(null);
+                setShowAddOrderForm(prev => !prev);
+              }}
+              className="px-2.5 py-1.5 bg-[#C5A880] hover:bg-[#d4b993] text-[#121110] text-[11px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+              title="Add or Restore Confirmed Order"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Add Order</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleRefreshLiveOrders}
               disabled={isLoadingOrders}
               className="px-2.5 py-1.5 bg-[#23201D] hover:bg-[#322E2A] text-emerald-300 text-[11px] font-semibold rounded-lg border border-emerald-500/30 transition-colors cursor-pointer flex items-center gap-1.5"
@@ -928,50 +951,156 @@ export const AdminDispatchModal: React.FC = () => {
           </button>
         </div>
 
-        {/* Cross-Device Cloud Sync Bar */}
-        {isCloudSyncActive ? (
-          <div className="bg-emerald-950/50 border-b border-emerald-500/30 px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2 text-emerald-200 min-w-0">
-              <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span className="truncate">
-                <strong className="text-emerald-300">Cloud Sync Active</strong> ({firebaseUser?.email}) · Confirmed &amp; awaiting orders synced live across Mobile &amp; Laptop
+        {/* Add / Restore Confirmed Order Form */}
+        {showAddOrderForm && (
+          <form
+            onSubmit={async e => {
+              e.preventDefault();
+              if (!savedCreds) return;
+              setManualFormError(null);
+              const prod = PRODUCTS.find(p => p.id === manualProductId) || PRODUCTS[0];
+              const variant = prod.variants[0];
+              const amountNum = Math.round(Number(manualAmount) || variant.price);
+              setIsSavingManual(true);
+              const res = await founderCreateManualOrder(
+                {
+                  recipientName: manualName,
+                  phoneNumber: manualPhone,
+                  streetAddress: manualAddress,
+                  city: manualCity,
+                  state: manualState,
+                  pincode: manualPincode,
+                  items: [
+                    {
+                      productId: prod.id,
+                      variantId: variant.id,
+                      productName: prod.name,
+                      variantLabel: variant.label,
+                      price: amountNum,
+                      mrp: variant.mrp,
+                      quantity: 1,
+                      image: prod.image,
+                    },
+                  ],
+                  total: amountNum,
+                  paymentStatus: 'PAID',
+                },
+                savedCreds
+              );
+              setIsSavingManual(false);
+              if (res.ok && res.order) {
+                setShowAddOrderForm(false);
+                setManualName('');
+                setManualPhone('');
+                setManualAddress('');
+                setManualCity('');
+                setManualState('');
+                setManualPincode('');
+                setStatusFilter('PAID');
+                setSelectedOrderId(res.order.id);
+                showToast(`Order #${res.order.id} saved & synced across all panels!`);
+              } else {
+                setManualFormError(res.message || 'Please check customer name, 10-digit phone, and amount.');
+              }
+            }}
+            className="p-4 bg-[#23201D] border-b border-[#C5A880]/30 space-y-3 text-xs"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-[#C5A880] uppercase tracking-wider text-[11px]">
+                Add / Restore Confirmed Order (Syncs to All Panels)
               </span>
+              <button
+                type="button"
+                onClick={() => setShowAddOrderForm(false)}
+                className="text-[#8A7463] hover:text-white text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void disconnectGoogleCloudSync()}
-              className="px-2.5 py-1 bg-[#121110]/70 hover:bg-[#121110] text-emerald-200 border border-emerald-500/30 rounded-lg text-[10px] font-semibold cursor-pointer shrink-0 transition-colors"
-            >
-              Disconnect Sync
-            </button>
-          </div>
-        ) : (
-          <div className="bg-amber-950/60 border-b border-amber-500/40 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
-            <div className="flex items-start sm:items-center gap-2 text-amber-100">
-              <CloudOff className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
-              <div>
-                <strong className="text-amber-300">Sync Phone &amp; Laptop Orders:</strong>{' '}
-                <span className="text-amber-100/90">
-                  Tap &ldquo;Connect Google Cloud Sync&rdquo; on both devices so confirmed orders show everywhere and cleared awaiting orders stay gone.
-                </span>
+            {manualFormError && (
+              <div className="text-red-300 bg-red-950/60 border border-red-500/40 rounded-lg px-3 py-1.5">
+                {manualFormError}
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <input
+                type="text"
+                required
+                value={manualName}
+                onChange={e => setManualName(e.target.value)}
+                placeholder="Customer Full Name *"
+                className="px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-white outline-none focus:border-[#C5A880]"
+              />
+              <input
+                type="tel"
+                required
+                value={manualPhone}
+                onChange={e => setManualPhone(e.target.value)}
+                placeholder="10-Digit Mobile Number *"
+                className="px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-white font-mono outline-none focus:border-[#C5A880]"
+              />
+              <div className="flex gap-2">
+                <select
+                  value={manualProductId}
+                  onChange={e => {
+                    const nextId = e.target.value;
+                    setManualProductId(nextId);
+                    const found = PRODUCTS.find(p => p.id === nextId);
+                    if (found?.variants[0]) setManualAmount(String(found.variants[0].price));
+                  }}
+                  className="flex-1 px-2.5 py-2 bg-[#121110] border border-white/15 rounded-lg text-white outline-none focus:border-[#C5A880]"
+                >
+                  {PRODUCTS.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  value={manualAmount}
+                  onChange={e => setManualAmount(e.target.value)}
+                  placeholder="₹"
+                  className="w-24 px-2.5 py-2 bg-[#121110] border border-white/15 rounded-lg text-white font-mono outline-none focus:border-[#C5A880]"
+                />
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => void connectGoogleCloudSync()}
-              disabled={isConnectingCloudSync}
-              className="px-3.5 py-1.5 bg-[#C5A880] hover:bg-[#d4b993] text-[#121110] font-bold text-[11px] uppercase tracking-wider rounded-lg shadow cursor-pointer shrink-0 disabled:opacity-60 transition-colors"
-            >
-              {isConnectingCloudSync ? 'Connecting...' : 'Connect Google Cloud Sync'}
-            </button>
-          </div>
-        )}
-
-        {cloudSyncError && (
-          <div className="bg-red-950/80 text-red-200 text-xs py-2 px-4 text-center border-b border-red-500/40 flex items-center justify-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-            <span>{cloudSyncError}</span>
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+              <input
+                type="text"
+                value={manualAddress}
+                onChange={e => setManualAddress(e.target.value)}
+                placeholder="Street Address (optional)"
+                className="sm:col-span-2 px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-white outline-none focus:border-[#C5A880]"
+              />
+              <input
+                type="text"
+                value={manualCity}
+                onChange={e => setManualCity(e.target.value)}
+                placeholder="City"
+                className="px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-white outline-none focus:border-[#C5A880]"
+              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={manualPincode}
+                  onChange={e => setManualPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Pincode"
+                  className="flex-1 px-3 py-2 bg-[#121110] border border-white/15 rounded-lg text-white font-mono outline-none focus:border-[#C5A880]"
+                />
+                <button
+                  type="submit"
+                  disabled={isSavingManual}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg cursor-pointer shrink-0 disabled:opacity-60"
+                >
+                  {isSavingManual ? 'Saving...' : 'Save Order'}
+                </button>
+              </div>
+            </div>
+          </form>
         )}
 
         {/* Toast alert */}
@@ -982,7 +1111,7 @@ export const AdminDispatchModal: React.FC = () => {
           </div>
         )}
 
-        {apiLoadError && !isCloudSyncActive && (
+        {apiLoadError && (
           <div className="bg-amber-950/90 text-amber-200 text-xs py-2 px-4 text-center border-b border-amber-500/40 flex items-center justify-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
             <span>{apiLoadError}</span>

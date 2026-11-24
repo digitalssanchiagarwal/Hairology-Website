@@ -17,6 +17,7 @@ const SEED_DATA_DIR = path.resolve(process.cwd(), '.data');
 const DATA_DIR = process.env.VERCEL ? '/tmp/hairology-data' : SEED_DATA_DIR;
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const ORDERS_BACKUP_FILE = path.join(DATA_DIR, 'orders.backup.json');
+const DISMISSED_FILE = path.join(DATA_DIR, 'dismissed_orders.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'founder_config.json');
 
 interface FounderConfig {
@@ -133,6 +134,49 @@ function writeOrders(orders: Order[]): void {
     }
   } catch (err) {
     console.error('Error writing orders file:', err);
+  }
+}
+
+function readDismissedIds(): string[] {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(DISMISSED_FILE)) {
+      const raw = fs.readFileSync(DISMISSED_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function addDismissedIds(ids: string[]): string[] {
+  if (ids.length === 0) return readDismissedIds();
+  try {
+    ensureDataDir();
+    const merged = Array.from(new Set([...readDismissedIds(), ...ids])).slice(-500);
+    const tmp = `${DISMISSED_FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(merged, null, 2), 'utf-8');
+    fs.renameSync(tmp, DISMISSED_FILE);
+    return merged;
+  } catch {
+    return readDismissedIds();
+  }
+}
+
+function removeDismissedIdFromDisk(id: string): void {
+  try {
+    ensureDataDir();
+    const current = readDismissedIds();
+    const next = current.filter(x => x !== id);
+    if (next.length !== current.length) {
+      const tmp = `${DISMISSED_FILE}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(next, null, 2), 'utf-8');
+      fs.renameSync(tmp, DISMISSED_FILE);
+    }
+  } catch {
+    // ignore
   }
 }
 
@@ -598,21 +642,30 @@ export function attachApiRoutes(app: express.Express): void {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     const analytics = computeOrderAnalytics(orders);
-    res.json({ orders, analytics, cardPaymentLink: getCardPaymentLink() });
+    res.json({
+      orders,
+      analytics,
+      dismissedIds: readDismissedIds(),
+      cardPaymentLink: getCardPaymentLink(),
+    });
   });
 
   app.post('/api/orders/reset', requireFounderAuth, (_req, res) => {
-    const paidOnly = readOrders()
+    const all = readOrders();
+    const unpaidIds = all.filter(o => o.paymentStatus !== 'PAID').map(o => o.id);
+    const dismissedIds = addDismissedIds(unpaidIds);
+    const paidOnly = all
       .filter(o => o.paymentStatus === 'PAID')
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     writeOrders(paidOnly);
     const analytics = computeOrderAnalytics(paidOnly);
-    res.json({ success: true, orders: paidOnly, analytics });
+    res.json({ success: true, orders: paidOnly, analytics, dismissedIds });
   });
 
   app.post('/api/orders/sync-cloud', requireFounderAuth, (req, res) => {
     try {
       const incomingOrders = Array.isArray(req.body?.orders) ? (req.body.orders as Order[]) : [];
+      const dismissedSet = new Set(readDismissedIds());
       const currentOrders = readOrders();
       const deliveryRank: Record<Order['orderStatus'], number> = {
         PAYMENT_FAILED: 0,
@@ -623,8 +676,16 @@ export function attachApiRoutes(app: express.Express): void {
         DELIVERED: 5,
       };
       const map = new Map<string, Order>();
-      for (const ord of [...incomingOrders, ...currentOrders]) {
+      for (const ord of currentOrders) {
         if (!ord || typeof ord.id !== 'string' || !ord.id) continue;
+        map.set(ord.id, ord);
+      }
+      for (const ord of incomingOrders) {
+        if (!ord || typeof ord.id !== 'string' || !ord.id) continue;
+        if (ord.paymentStatus !== 'PAID' && dismissedSet.has(ord.id)) continue;
+        if (ord.paymentStatus === 'PAID') {
+          removeDismissedIdFromDisk(ord.id);
+        }
         const existing = map.get(ord.id);
         if (!existing) {
           map.set(ord.id, ord);
@@ -647,6 +708,7 @@ export function attachApiRoutes(app: express.Express): void {
         success: true,
         orders: merged,
         analytics: computeOrderAnalytics(merged),
+        dismissedIds: readDismissedIds(),
       });
     } catch (err) {
       console.error('Cloud order sync error:', err);
@@ -734,7 +796,12 @@ export function attachApiRoutes(app: express.Express): void {
     }
 
     const orders = readOrders();
-    const idx = orders.findIndex(o => o.id === orderId);
+    let idx = orders.findIndex(o => o.id === orderId);
+    const fallbackOrder = req.body?.order as Order | undefined;
+    if (idx === -1 && fallbackOrder && fallbackOrder.id === orderId) {
+      orders.unshift(fallbackOrder);
+      idx = 0;
+    }
     if (idx === -1) {
       res.status(404).json({ error: 'Order not found.' });
       return;
@@ -764,9 +831,15 @@ export function attachApiRoutes(app: express.Express): void {
     try {
       const orderId = req.params.id;
       const confirmationRef = `FOUNDER-CONFIRMED-${Date.now().toString().slice(-6)}`;
+      removeDismissedIdFromDisk(orderId);
 
       const orders = readOrders();
-      const idx = orders.findIndex(o => o.id === orderId);
+      let idx = orders.findIndex(o => o.id === orderId);
+      const fallbackOrder = req.body?.order as Order | undefined;
+      if (idx === -1 && fallbackOrder && fallbackOrder.id === orderId) {
+        orders.unshift(fallbackOrder);
+        idx = 0;
+      }
       if (idx === -1) {
         res.status(404).json({ error: 'Order not found.' });
         return;
@@ -781,8 +854,8 @@ export function attachApiRoutes(app: express.Express): void {
           orders[idx].orderStatus === 'PENDING_CONFIRMATION' || orders[idx].orderStatus === 'PAYMENT_FAILED'
             ? 'CONFIRMED'
             : orders[idx].orderStatus,
-        gatewayTransactionId: confirmationRef,
-        paymentVerifiedAt: new Date().toISOString(),
+        gatewayTransactionId: orders[idx].gatewayTransactionId || confirmationRef,
+        paymentVerifiedAt: orders[idx].paymentVerifiedAt || new Date().toISOString(),
         paymentFailureReason: undefined,
       };
 
@@ -892,7 +965,12 @@ export function attachApiRoutes(app: express.Express): void {
       const reason = String(req.body?.reason || '').trim() || 'No payment received for this order.';
 
       const orders = readOrders();
-      const idx = orders.findIndex(o => o.id === orderId);
+      let idx = orders.findIndex(o => o.id === orderId);
+      const fallbackOrder = req.body?.order as Order | undefined;
+      if (idx === -1 && fallbackOrder && fallbackOrder.id === orderId) {
+        orders.unshift(fallbackOrder);
+        idx = 0;
+      }
       if (idx === -1) {
         res.status(404).json({ error: 'Order not found.' });
         return;
@@ -925,6 +1003,8 @@ export function attachApiRoutes(app: express.Express): void {
   app.post('/api/orders/clear-unpaid', requireFounderAuth, (_req, res) => {
     try {
       const orders = readOrders();
+      const unpaidIds = orders.filter(o => o.paymentStatus !== 'PAID').map(o => o.id);
+      const dismissedIds = addDismissedIds(unpaidIds);
       const paidOnly = orders
         .filter(o => o.paymentStatus === 'PAID')
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -935,6 +1015,7 @@ export function attachApiRoutes(app: express.Express): void {
         removedCount,
         orders: paidOnly,
         analytics: computeOrderAnalytics(paidOnly),
+        dismissedIds,
       });
     } catch (err) {
       console.error('Clear unpaid orders error:', err);
@@ -948,14 +1029,11 @@ export function attachApiRoutes(app: express.Express): void {
       const orderId = req.params.id;
       const orders = readOrders();
       const target = orders.find(o => o.id === orderId);
-      if (!target) {
-        res.status(404).json({ error: 'Order not found.' });
-        return;
-      }
-      if (target.paymentStatus === 'PAID') {
+      if (target && target.paymentStatus === 'PAID') {
         res.status(400).json({ error: 'Safety block: Cannot delete a verified PAID customer order.' });
         return;
       }
+      const dismissedIds = addDismissedIds([orderId]);
       const remaining = orders
         .filter(o => o.id !== orderId)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -964,6 +1042,7 @@ export function attachApiRoutes(app: express.Express): void {
         success: true,
         orders: remaining,
         analytics: computeOrderAnalytics(remaining),
+        dismissedIds,
       });
     } catch (err) {
       console.error('Delete unpaid order error:', err);
