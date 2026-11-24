@@ -26,7 +26,9 @@ import {
   BarChart3,
   Phone,
   User,
-  Trash2
+  Trash2,
+  Cloud,
+  CloudOff
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { ADMIN_PHONE, PRODUCTS, USER_UPI_ID } from '../data/products';
@@ -94,7 +96,13 @@ export const AdminDispatchModal: React.FC = () => {
     founderVerifyUpiPayment,
     founderMarkPaymentFailed,
     founderDeleteUnpaidOrder,
-    founderClearUnpaidOrders
+    founderClearUnpaidOrders,
+    firebaseUser,
+    isCloudSyncActive,
+    cloudSyncError,
+    isConnectingCloudSync,
+    connectGoogleCloudSync,
+    disconnectGoogleCloudSync
   } = useCart();
 
   // Two-Step Authentication Gate State (Gmail -> Access Code)
@@ -171,6 +179,12 @@ export const AdminDispatchModal: React.FC = () => {
 
     return () => clearInterval(interval);
   }, [isAdminOpen, isAuthenticated, savedCreds, fetchFounderOrders]);
+
+  useEffect(() => {
+    if (isCloudSyncActive) {
+      setApiLoadError(null);
+    }
+  }, [isCloudSyncActive]);
 
   // Reset to 2-step verification gate whenever Founder Panel is opened via URL or search
   useEffect(() => {
@@ -914,6 +928,52 @@ export const AdminDispatchModal: React.FC = () => {
           </button>
         </div>
 
+        {/* Cross-Device Cloud Sync Bar */}
+        {isCloudSyncActive ? (
+          <div className="bg-emerald-950/50 border-b border-emerald-500/30 px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 text-emerald-200 min-w-0">
+              <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="truncate">
+                <strong className="text-emerald-300">Cloud Sync Active</strong> ({firebaseUser?.email}) · Confirmed &amp; awaiting orders synced live across Mobile &amp; Laptop
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => void disconnectGoogleCloudSync()}
+              className="px-2.5 py-1 bg-[#121110]/70 hover:bg-[#121110] text-emerald-200 border border-emerald-500/30 rounded-lg text-[10px] font-semibold cursor-pointer shrink-0 transition-colors"
+            >
+              Disconnect Sync
+            </button>
+          </div>
+        ) : (
+          <div className="bg-amber-950/60 border-b border-amber-500/40 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+            <div className="flex items-start sm:items-center gap-2 text-amber-100">
+              <CloudOff className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+              <div>
+                <strong className="text-amber-300">Sync Phone &amp; Laptop Orders:</strong>{' '}
+                <span className="text-amber-100/90">
+                  Tap &ldquo;Connect Google Cloud Sync&rdquo; on both devices so confirmed orders show everywhere and cleared awaiting orders stay gone.
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void connectGoogleCloudSync()}
+              disabled={isConnectingCloudSync}
+              className="px-3.5 py-1.5 bg-[#C5A880] hover:bg-[#d4b993] text-[#121110] font-bold text-[11px] uppercase tracking-wider rounded-lg shadow cursor-pointer shrink-0 disabled:opacity-60 transition-colors"
+            >
+              {isConnectingCloudSync ? 'Connecting...' : 'Connect Google Cloud Sync'}
+            </button>
+          </div>
+        )}
+
+        {cloudSyncError && (
+          <div className="bg-red-950/80 text-red-200 text-xs py-2 px-4 text-center border-b border-red-500/40 flex items-center justify-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+            <span>{cloudSyncError}</span>
+          </div>
+        )}
+
         {/* Toast alert */}
         {whatsappToast && (
           <div className="bg-emerald-900 text-emerald-100 text-xs py-2 px-4 text-center border-b border-emerald-700 flex items-center justify-center gap-2">
@@ -922,7 +982,7 @@ export const AdminDispatchModal: React.FC = () => {
           </div>
         )}
 
-        {apiLoadError && (
+        {apiLoadError && !isCloudSyncActive && (
           <div className="bg-amber-950/90 text-amber-200 text-xs py-2 px-4 text-center border-b border-amber-500/40 flex items-center justify-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
             <span>{apiLoadError}</span>

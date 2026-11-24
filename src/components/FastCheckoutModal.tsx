@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import {
   X,
@@ -27,6 +27,7 @@ import {
 } from '../data/products';
 import { lookupPincode } from '../data/pincodes';
 import { Order } from '../types';
+import { fsCreatePendingOrder, fsWatchOrderStatus } from '../services/firestoreOrders';
 
 export const FastCheckoutModal: React.FC = () => {
   const {
@@ -59,6 +60,7 @@ export const FastCheckoutModal: React.FC = () => {
   const [dynamicUpiQrUrl, setDynamicUpiQrUrl] = useState<string>('');
   const [useDynamicUpiQr, setUseDynamicUpiQr] = useState(true);
   const [copiedUpi, setCopiedUpi] = useState(false);
+  const fsCreatedOrderIdsRef = useRef<Set<string>>(new Set());
 
   const grandTotal = Math.max(0, subtotal + shippingFee);
   const isAboveQrAutoLimit = grandTotal > 2000;
@@ -82,7 +84,7 @@ export const FastCheckoutModal: React.FC = () => {
     }
   }, [grandTotal, upiDeepLink]);
 
-  // Listen to local context updates and poll Express server status every 2 seconds.
+  // Listen to real-time Firestore order status, local context, and Express server polling every 2 seconds.
   // Thank You confirmation ONLY unlocks once paymentStatus === 'PAID'.
   useEffect(() => {
     if (!isCheckoutOpen || checkoutStep !== 2 || !pendingOrder?.id || completedOrder) return;
@@ -98,6 +100,35 @@ export const FastCheckoutModal: React.FC = () => {
         matchInContext.paymentFailureReason || 'Payment was not received or was declined. Please retry UPI payment.'
       );
     }
+
+    const unsubFirestore = fsWatchOrderStatus(
+      pendingOrder.id,
+      statusUpdate => {
+        if (statusUpdate.paymentStatus === 'PAID') {
+          const paidOrder: Order = {
+            ...pendingOrder,
+            paymentStatus: 'PAID',
+            orderStatus: statusUpdate.orderStatus,
+            gatewayTransactionId:
+              statusUpdate.gatewayTransactionId || pendingOrder.gatewayTransactionId,
+            trackingNumber: statusUpdate.trackingNumber || pendingOrder.trackingNumber,
+            paymentVerifiedAt: new Date().toISOString(),
+            paymentFailureReason: undefined,
+          };
+          upsertOrder(paidOrder);
+          setCompletedOrder(paidOrder);
+          setPendingOrder(null);
+        } else if (statusUpdate.paymentStatus === 'FAILED') {
+          setPaymentError(
+            statusUpdate.paymentFailureReason ||
+              'Payment was not received or was declined. Please retry UPI payment.'
+          );
+        }
+      },
+      () => {
+        // Ignore transient listener warnings; API polling fallback stays active
+      }
+    );
 
     const interval = setInterval(async () => {
       try {
@@ -120,6 +151,7 @@ export const FastCheckoutModal: React.FC = () => {
     }, 2000);
 
     return () => {
+      unsubFirestore();
       clearInterval(interval);
     };
   }, [isCheckoutOpen, checkoutStep, pendingOrder, completedOrder, orders, upsertOrder]);
@@ -255,6 +287,18 @@ export const FastCheckoutModal: React.FC = () => {
 
       if (!createdOrder) {
         createdOrder = buildClientFallbackOrder();
+      }
+
+      if (!fsCreatedOrderIdsRef.current.has(createdOrder.id)) {
+        fsCreatedOrderIdsRef.current.add(createdOrder.id);
+        const orderToCreate = createdOrder;
+        await Promise.race([
+          fsCreatePendingOrder(orderToCreate).catch(err => {
+            fsCreatedOrderIdsRef.current.delete(orderToCreate.id);
+            console.warn('Firestore pending order create notice:', err);
+          }),
+          new Promise<void>(resolve => setTimeout(resolve, 2500))
+        ]);
       }
 
       upsertOrder(createdOrder);

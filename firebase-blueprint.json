@@ -35,7 +35,10 @@
         "total": { "type": "number" },
         "paymentMethod": {
           "type": "string",
-          "enum": ["UPI_QR"]
+          "enum": ["UPI_QR", "UPI"]
+        },
+        "paymentInitiated": {
+          "type": "boolean"
         },
         "paymentStatus": {
           "type": "string",

@@ -17,6 +17,48 @@ import { VideoWalkthroughModal } from './components/VideoWalkthroughModal';
 import { StickyMobileBar } from './components/StickyMobileBar';
 import { ShopifyConnectModal } from './components/ShopifyConnectModal';
 
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; message: string }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, message: '' };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return {
+      hasError: true,
+      message: error?.message || 'An unexpected application error occurred.',
+    };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#FDFBF7] text-[#121110] flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-white rounded-3xl border border-[#C5A880]/40 p-6 text-center space-y-4 shadow-xl">
+            <h2 className="font-serif text-2xl font-bold text-[#121110]">
+              Something went wrong
+            </h2>
+            <p className="text-xs text-[#6B7280] leading-relaxed">
+              Please reload the page to restore your session. Your verified order records remain safely saved.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="px-5 py-2.5 bg-[#121110] text-[#C5A880] text-xs font-bold uppercase tracking-wider rounded-xl cursor-pointer"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const [shopifyModalOpen, setShopifyModalOpen] = useState(false);
 
@@ -64,40 +106,42 @@ export default function App() {
   }, []);
 
   return (
-    <CartProvider>
-      <div className="min-h-screen bg-[#FDFBF7] text-[#121110] flex flex-col font-sans selection:bg-[#C5A880]/30 selection:text-[#121110]">
-        {/* Navigation and Top Announcement */}
-        <Header />
+    <AppErrorBoundary>
+      <CartProvider>
+        <div className="min-h-screen bg-[#FDFBF7] text-[#121110] flex flex-col font-sans selection:bg-[#C5A880]/30 selection:text-[#121110]">
+          {/* Navigation and Top Announcement */}
+          <Header />
 
-        {/* Main Content Sections */}
-        <main className="flex-1">
-          {/* 1. Hero Section with blended bottle image & luxury typography */}
-          <HeroSection />
+          {/* Main Content Sections */}
+          <main className="flex-1">
+            {/* 1. Hero Section with blended bottle image & luxury typography */}
+            <HeroSection />
 
-          {/* 2. Interactive Product Detail Module */}
-          <ProductDetailModule />
+            {/* 2. Interactive Product Detail Module */}
+            <ProductDetailModule />
 
-          {/* 3. Customer Reviews Section with Star Breakdown & Real Testimonials */}
-          <CustomerReviews />
-        </main>
+            {/* 3. Customer Reviews Section with Star Breakdown & Real Testimonials */}
+            <CustomerReviews />
+          </main>
 
-        {/* Footer (100% clean - No public admin or staff links visible to customers) */}
-        <Footer />
+          {/* Footer (100% clean - No public admin or staff links visible to customers) */}
+          <Footer />
 
-        {/* Floating Controls & Modals */}
-        <CartDrawer />
-        <FastCheckoutModal />
-        
-        {/* Private Owner Orders Portal (Protected by Founder Gmail + Security Code) */}
-        <AdminDispatchModal />
+          {/* Floating Controls & Modals */}
+          <CartDrawer />
+          <FastCheckoutModal />
+          
+          {/* Private Owner Orders Portal (Protected by Founder Gmail + Security Code) */}
+          <AdminDispatchModal />
 
-        <VideoWalkthroughModal />
-        <StickyMobileBar />
-        <ShopifyConnectModal 
-          isOpen={shopifyModalOpen} 
-          onClose={() => setShopifyModalOpen(false)} 
-        />
-      </div>
-    </CartProvider>
+          <VideoWalkthroughModal />
+          <StickyMobileBar />
+          <ShopifyConnectModal 
+            isOpen={shopifyModalOpen} 
+            onClose={() => setShopifyModalOpen(false)} 
+          />
+        </div>
+      </CartProvider>
+    </AppErrorBoundary>
   );
 }

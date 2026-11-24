@@ -1,6 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
 import { CartItem, AppliedCoupon, Order, OrderAnalytics, ProductSalesMetric } from '../types';
 import { PRODUCTS, PRODUCT_IMAGE_DUO, ADMIN_PHONE, USER_UPI_ID } from '../data/products';
+import { auth, googleProvider, isAuthorizedFounderUser } from '../firebase';
+import {
+  fsWatchAllOrders,
+  fsConfirmOrderPaid,
+  fsMarkOrderFailed,
+  fsUpdateDeliveryStatus,
+  fsDeleteUnpaidOrder,
+  fsClearAllUnpaidOrders,
+  fsCreateManualOrder,
+  fsSyncPaidOrdersToCloud,
+} from '../services/firestoreOrders';
 
 async function safeParseJson(res: Response): Promise<Record<string, unknown> | null> {
   const ct = res.headers.get('content-type') || '';
@@ -126,6 +138,12 @@ interface CartContextType {
   ) => Promise<{ ok: boolean; message?: string }>;
   recentAdminAlert: string | null;
   clearAdminAlert: () => void;
+  firebaseUser: User | null;
+  isCloudSyncActive: boolean;
+  cloudSyncError: string | null;
+  isConnectingCloudSync: boolean;
+  connectGoogleCloudSync: () => Promise<{ ok: boolean; error?: string }>;
+  disconnectGoogleCloudSync: () => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -197,19 +215,34 @@ function removeDismissedId(id: string): void {
 }
 
 function mergeAuthoritativeOrders(
-  serverOrders: Order[],
+  authoritativeOrders: Order[],
   localOrders: Order[]
 ): { merged: Order[]; needsServerHeal: Order[] } {
   const verifiedForever = readVerifiedOrdersForever();
   const dismissedIds = readDismissedIds();
-  const serverMap = new Map<string, Order>();
-  for (const s of serverOrders) {
-    if (s && typeof s.id === 'string') serverMap.set(s.id, s);
+  const authMap = new Map<string, Order>();
+  for (const s of authoritativeOrders) {
+    if (s && typeof s.id === 'string') authMap.set(s.id, s);
   }
 
   const combined = new Map<string, Order>();
-  for (const ord of [...serverOrders, ...localOrders, ...verifiedForever]) {
+  // Authoritative source (Firestore or API) dictates all orders, including PENDING/FAILED lifecycle.
+  for (const ord of authoritativeOrders) {
     if (!ord || typeof ord.id !== 'string') continue;
+    const prev = combined.get(ord.id);
+    combined.set(ord.id, prev ? pickPreferredOrder(prev, ord) : ord);
+  }
+
+  // Only PAID orders (plus very recent <2m client-only drafts not yet synced) may heal upward from localStorage;
+  // dismissed/deleted PENDING orders are NEVER resurrected from localStorage across logins or devices.
+  const twoMinutesAgo = Date.now() - 120_000;
+  for (const ord of [...localOrders, ...verifiedForever]) {
+    if (!ord || typeof ord.id !== 'string') continue;
+    const isFreshClientDraft =
+      ord.paymentStatus === 'PENDING' &&
+      !dismissedIds.has(ord.id) &&
+      new Date(ord.createdAt).getTime() > twoMinutesAgo;
+    if (ord.paymentStatus !== 'PAID' && !isFreshClientDraft) continue;
     const prev = combined.get(ord.id);
     combined.set(ord.id, prev ? pickPreferredOrder(prev, ord) : ord);
   }
@@ -221,7 +254,7 @@ function mergeAuthoritativeOrders(
   saveVerifiedOrdersForever(merged);
 
   const needsServerHeal = merged.filter(ord => {
-    const srv = serverMap.get(ord.id);
+    const srv = authMap.get(ord.id);
     if (!srv) return ord.paymentStatus === 'PAID';
     if (ord.paymentStatus === 'PAID' && srv.paymentStatus !== 'PAID') return true;
     return ord.paymentStatus === 'PAID' && DELIVERY_RANK[ord.orderStatus] > DELIVERY_RANK[srv.orderStatus];
@@ -402,6 +435,98 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const ordersRef = useRef<Order[]>(orders);
   ordersRef.current = orders;
 
+  const firestoreMapRef = useRef<Map<string, Order>>(new Map());
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [isFirebaseAuthReady, setIsFirebaseAuthReady] = useState(false);
+  const [cloudSyncError, setCloudSyncError] = useState<string | null>(null);
+  const [isConnectingCloudSync, setIsConnectingCloudSync] = useState(false);
+
+  const isCloudSyncActive = Boolean(firebaseUser && isAuthorizedFounderUser(firebaseUser));
+  const isCloudSyncActiveRef = useRef<boolean>(isCloudSyncActive);
+  isCloudSyncActiveRef.current = isCloudSyncActive;
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, user => {
+      setFirebaseUser(user);
+      setIsFirebaseAuthReady(true);
+      if (user && !isAuthorizedFounderUser(user)) {
+        setCloudSyncError('Signed-in Google account is not an authorized founder email.');
+      } else {
+        setCloudSyncError(null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Attach real-time Firestore orders listener ONLY when authenticated as verified founder
+  useEffect(() => {
+    if (!isFirebaseAuthReady || !isCloudSyncActive) return;
+
+    const unsub = fsWatchAllOrders(
+      (cloudOrders, fsMap) => {
+        firestoreMapRef.current = fsMap;
+        setCloudSyncError(null);
+        const { merged, needsServerHeal } = mergeAuthoritativeOrders(cloudOrders, ordersRef.current);
+        setOrders(merged);
+        if (needsServerHeal.length > 0) {
+          void fsSyncPaidOrdersToCloud(needsServerHeal, fsMap).catch(err => {
+            console.warn('Firestore PAID-order sync warning:', err);
+          });
+        }
+      },
+      err => {
+        console.error('Firestore live orders listener error:', err);
+        setCloudSyncError('Cloud sync paused due to Firestore permission or network error.');
+      }
+    );
+
+    return () => unsub();
+  }, [isFirebaseAuthReady, isCloudSyncActive]);
+
+  const connectGoogleCloudSync = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+    setIsConnectingCloudSync(true);
+    setCloudSyncError(null);
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      if (!isAuthorizedFounderUser(cred.user)) {
+        await signOut(auth);
+        const msg =
+          'Please sign in with an authorized founder Gmail (guddan1102@gmail.com or digitalssanchiagarwal@gmail.com).';
+        setCloudSyncError(msg);
+        return { ok: false, error: msg };
+      }
+      setFirebaseUser(cred.user);
+      return { ok: true };
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code || '';
+      let msg = 'Could not connect Google Cloud Sync. Please try again.';
+      if (code === 'auth/popup-blocked') {
+        msg = 'Sign-in popup was blocked by your browser. Please allow popups for this site and tap Connect again.';
+      } else if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        msg = 'Google Sign-In was closed before finishing. Tap Connect Cloud Sync to try again.';
+      } else if (code === 'auth/unauthorized-domain') {
+        const host = typeof window !== 'undefined' ? window.location.hostname : '';
+        msg = `Domain "${host}" must be added under Firebase Console → Authentication → Settings → Authorized domains.`;
+      } else if (err instanceof Error && err.message) {
+        msg = err.message;
+      }
+      setCloudSyncError(msg);
+      return { ok: false, error: msg };
+    } finally {
+      setIsConnectingCloudSync(false);
+    }
+  }, []);
+
+  const disconnectGoogleCloudSync = useCallback(async () => {
+    try {
+      await signOut(auth);
+      firestoreMapRef.current = new Map();
+      setFirebaseUser(null);
+    } catch (err) {
+      console.error('Sign out error:', err);
+    }
+  }, []);
+
   const analytics = useMemo(() => computeClientAnalytics(orders), [orders]);
 
   useEffect(() => {
@@ -553,19 +678,34 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       const data = await safeParseJson(res);
       if (data === null) {
+        if (isCloudSyncActiveRef.current) {
+          return { ok: true };
+        }
         return {
           ok: false,
-          error: 'Orders server is unavailable on this static deployment. Deploy with Vercel serverless /api or Node server (npm start).',
+          error: 'Orders server is unavailable on this static deployment. Connect Google Cloud Sync above to sync across Mobile & Laptop.',
         };
       }
       if (!res.ok) {
         return { ok: false, error: typeof data.error === 'string' ? data.error : 'Failed to fetch live orders.' };
       }
       if (Array.isArray(data.orders)) {
-        const { merged, needsServerHeal } = mergeAuthoritativeOrders(
-          data.orders as Order[],
-          ordersRef.current
-        );
+        const serverOrders = data.orders as Order[];
+        if (isCloudSyncActiveRef.current) {
+          // When Cloud Sync (Firestore) is active, Firestore owns the awaiting list;
+          // only heal any verified PAID orders from server/local upward into Firestore.
+          const paidFromServer = serverOrders.filter(o => o && o.paymentStatus === 'PAID');
+          const { needsServerHeal } = mergeAuthoritativeOrders(
+            Array.from(firestoreMapRef.current.values()),
+            [...paidFromServer, ...ordersRef.current]
+          );
+          if (needsServerHeal.length > 0) {
+            void fsSyncPaidOrdersToCloud(needsServerHeal, firestoreMapRef.current).catch(() => {});
+          }
+          return { ok: true };
+        }
+
+        const { merged, needsServerHeal } = mergeAuthoritativeOrders(serverOrders, ordersRef.current);
         setOrders(merged);
 
         if (needsServerHeal.length > 0) {
@@ -583,6 +723,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { ok: true };
     } catch (err) {
       console.error('Fetch founder orders error:', err);
+      if (isCloudSyncActiveRef.current) return { ok: true };
       return { ok: false, error: 'Unable to refresh founder orders.' };
     }
   }, []);
@@ -593,7 +734,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: Order['orderStatus'],
       founderAuth?: FounderAuthHeaders
     ): Promise<{ ok: boolean; error?: string }> => {
-      const targetOrder = ordersRef.current.find(o => o.id === orderId);
+      const targetOrder = ordersRef.current.find(o => o.id === orderId) || firestoreMapRef.current.get(orderId);
       if (
         targetOrder &&
         (status === 'DISPATCHED' || status === 'OUT_FOR_DELIVERY' || status === 'DELIVERED') &&
@@ -603,6 +744,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ok: false,
           error: 'Safety block: Cannot mark an unpaid order as Dispatched/Delivered until UPI payment is verified as PAID.',
         };
+      }
+
+      if (isCloudSyncActiveRef.current && targetOrder) {
+        try {
+          await fsUpdateDeliveryStatus(targetOrder, status, firestoreMapRef.current.has(orderId));
+        } catch (err) {
+          console.error('Firestore status update error:', err);
+          return { ok: false, error: 'Unable to update delivery status in Cloud Sync.' };
+        }
       }
 
       if (founderAuth) {
@@ -617,18 +767,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             body: JSON.stringify({ orderStatus: status }),
           });
           const data = await safeParseJson(res);
-          if (data !== null) {
-            if (!res.ok) {
+          if (data !== null && !res.ok) {
+            if (!isCloudSyncActiveRef.current) {
               return { ok: false, error: typeof data.error === 'string' ? data.error : 'Could not update delivery status.' };
             }
-            if (Array.isArray(data.orders)) {
-              const updatedLocal = ordersRef.current.map(ord =>
-                ord.id === orderId ? { ...ord, orderStatus: status } : ord
-              );
-              const { merged } = mergeAuthoritativeOrders(data.orders as Order[], updatedLocal);
-              setOrders(merged);
-            }
-            return { ok: true };
           }
         } catch (err) {
           console.error('Update order status error:', err);
@@ -655,7 +797,19 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const verifiedAtIso = new Date().toISOString();
       removeDismissedId(orderId);
 
-      let serverHandled = false;
+      const targetOrder = ordersRef.current.find(o => o.id === orderId) || firestoreMapRef.current.get(orderId);
+      let cloudConfirmed = false;
+
+      if (isCloudSyncActiveRef.current && targetOrder) {
+        try {
+          await fsConfirmOrderPaid(targetOrder, effectiveRef, firestoreMapRef.current.has(orderId));
+          cloudConfirmed = true;
+        } catch (err) {
+          console.error('Firestore confirm order error:', err);
+          return { ok: false, message: 'Could not save order confirmation to Cloud Sync.' };
+        }
+      }
+
       try {
         const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/verify-upi`, {
           method: 'POST',
@@ -667,55 +821,43 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           body: JSON.stringify({}),
         });
         const data = await safeParseJson(res);
-        if (data !== null) {
-          serverHandled = true;
-          if (!res.ok) {
-            return { ok: false, message: typeof data.error === 'string' ? data.error : 'Could not confirm order.' };
-          }
+        if (data !== null && res.ok) {
           const confirmedOrder = data.order as Order | undefined;
           if (confirmedOrder) {
             saveVerifiedOrdersForever([confirmedOrder]);
           }
-          if (Array.isArray(data.orders)) {
-            const { merged } = mergeAuthoritativeOrders(data.orders as Order[], ordersRef.current);
-            setOrders(merged);
-          }
-          return {
-            ok: true,
-            message: `Order #${orderId} confirmed PAID & saved permanently!`,
-          };
         }
       } catch (err) {
         console.warn('Server UPI verify notice:', err);
       }
 
-      if (!serverHandled) {
-        setOrders(prev => {
-          const next = prev.map(ord =>
-            ord.id === orderId
-              ? {
-                  ...ord,
-                  paymentStatus: 'PAID' as const,
-                  orderStatus:
-                    ord.orderStatus === 'PENDING_CONFIRMATION' || ord.orderStatus === 'PAYMENT_FAILED'
-                      ? ('CONFIRMED' as const)
-                      : ord.orderStatus,
-                  gatewayTransactionId: effectiveRef,
-                  paymentVerifiedAt: verifiedAtIso,
-                  paymentFailureReason: undefined,
-                }
-              : ord
-          );
-          saveVerifiedOrdersForever(next);
-          return next;
-        });
-        return {
-          ok: true,
-          message: `Order #${orderId} confirmed PAID (Ref: ${effectiveRef}) & saved permanently!`,
-        };
-      }
+      setOrders(prev => {
+        const next = prev.map(ord =>
+          ord.id === orderId
+            ? {
+                ...ord,
+                paymentStatus: 'PAID' as const,
+                paymentInitiated: true,
+                orderStatus:
+                  ord.orderStatus === 'PENDING_CONFIRMATION' || ord.orderStatus === 'PAYMENT_FAILED'
+                    ? ('CONFIRMED' as const)
+                    : ord.orderStatus,
+                gatewayTransactionId: effectiveRef,
+                paymentVerifiedAt: verifiedAtIso,
+                paymentFailureReason: undefined,
+              }
+            : ord
+        );
+        saveVerifiedOrdersForever(next);
+        return next;
+      });
 
-      return { ok: false, message: 'Could not verify UPI transaction reference.' };
+      return {
+        ok: true,
+        message: cloudConfirmed
+          ? `Order #${orderId} confirmed PAID & synced across all your devices!`
+          : `Order #${orderId} confirmed PAID & saved!`,
+      };
     },
     []
   );
@@ -726,9 +868,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       reason: string,
       founderAuth: FounderAuthHeaders
     ): Promise<{ ok: boolean; message?: string }> => {
-      let serverHandled = false;
+      const targetOrder = ordersRef.current.find(o => o.id === orderId) || firestoreMapRef.current.get(orderId);
+      if (isCloudSyncActiveRef.current && targetOrder) {
+        try {
+          await fsMarkOrderFailed(targetOrder, reason, firestoreMapRef.current.has(orderId));
+        } catch (err) {
+          console.error('Firestore mark-failed error:', err);
+          return { ok: false, message: 'Could not update payment failure in Cloud Sync.' };
+        }
+      }
+
       try {
-        const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}/mark-failed`, {
+        await fetch(`/api/orders/${encodeURIComponent(orderId)}/mark-failed`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -737,37 +888,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           body: JSON.stringify({ reason }),
         });
-        const data = await safeParseJson(res);
-        if (data !== null) {
-          serverHandled = true;
-          if (!res.ok) {
-            return { ok: false, message: typeof data.error === 'string' ? data.error : 'Could not mark order as failed.' };
-          }
-          if (Array.isArray(data.orders)) {
-            const { merged } = mergeAuthoritativeOrders(data.orders as Order[], ordersRef.current);
-            setOrders(merged);
-          }
-          return {
-            ok: true,
-            message: `Order #${orderId} marked as PAYMENT FAILED.`,
-          };
-        }
       } catch (err) {
         console.warn('Server mark-failed notice:', err);
       }
 
-      if (!serverHandled) {
-        setOrders(prev =>
-          prev.map(ord =>
-            ord.id === orderId
-              ? { ...ord, paymentStatus: 'FAILED', orderStatus: 'PAYMENT_FAILED', paymentFailureReason: reason }
-              : ord
-          )
-        );
-        return { ok: true, message: `Order #${orderId} marked as PAYMENT FAILED.` };
-      }
-
-      return { ok: false, message: 'Could not update payment status.' };
+      setOrders(prev =>
+        prev.map(ord =>
+          ord.id === orderId
+            ? { ...ord, paymentStatus: 'FAILED', orderStatus: 'PAYMENT_FAILED', paymentFailureReason: reason }
+            : ord
+        )
+      );
+      return { ok: true, message: `Order #${orderId} marked as PAYMENT FAILED.` };
     },
     []
   );
@@ -837,8 +969,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : {}),
       };
 
+      if (isCloudSyncActiveRef.current) {
+        try {
+          await fsCreateManualOrder(newOrder);
+        } catch (err) {
+          console.error('Firestore manual order create error:', err);
+          return { ok: false, message: 'Could not save manual order to Cloud Sync.' };
+        }
+      }
+
       try {
-        const res = await fetch('/api/orders/manual-create', {
+        await fetch('/api/orders/manual', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -847,25 +988,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           body: JSON.stringify({ order: newOrder }),
         });
-        const data = await safeParseJson(res);
-        if (data !== null) {
-          if (!res.ok) {
-            return {
-              ok: false,
-              message: typeof data.error === 'string' ? data.error : 'Could not record order on server.',
-            };
-          }
-          if (Array.isArray(data.orders)) {
-            if (isPaid) saveVerifiedOrdersForever([newOrder]);
-            const { merged } = mergeAuthoritativeOrders(data.orders as Order[], ordersRef.current);
-            setOrders(merged);
-            return {
-              ok: true,
-              order: (data.order as Order) || newOrder,
-              message: `Order #${newOrder.id} (₹${newOrder.total}) recorded as ${newOrder.paymentStatus}!`,
-            };
-          }
-        }
       } catch (err) {
         console.warn('Manual order server fallback notice:', err);
       }
@@ -884,6 +1006,19 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const founderResetAllOrders = useCallback(
     async (founderAuth: FounderAuthHeaders): Promise<{ ok: boolean; message?: string }> => {
       try {
+        if (isCloudSyncActiveRef.current) {
+          const unpaidIds = Array.from(
+            new Set([
+              ...ordersRef.current.filter(o => o.paymentStatus !== 'PAID').map(o => o.id),
+              ...Array.from(firestoreMapRef.current.values())
+                .filter(o => o.paymentStatus !== 'PAID')
+                .map(o => o.id),
+            ])
+          );
+          if (unpaidIds.length > 0) {
+            await fsClearAllUnpaidOrders(unpaidIds);
+          }
+        }
         try {
           const res = await fetch('/api/orders/reset', {
             method: 'POST',
@@ -899,20 +1034,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch {
           // ignore offline error
         }
-        try {
-          localStorage.removeItem('hairology_orders_v1');
-          localStorage.removeItem('hairology_orders_v2');
-          localStorage.removeItem(STORAGE_KEY_ORDERS);
-          localStorage.removeItem(STORAGE_KEY_VERIFIED_ORDERS);
-          localStorage.removeItem(STORAGE_KEY_DISMISSED_IDS);
-        } catch {
-          // ignore storage error
-        }
-        setOrders([]);
+        setOrders(prev => prev.filter(o => o.paymentStatus === 'PAID'));
         setRecentAdminAlert(null);
         return {
           ok: true,
-          message: 'All previous orders cleared! Founder Panel is now completely fresh.',
+          message: 'Unpaid orders cleared! Verified PAID orders preserved.',
         };
       } catch (err) {
         console.error('Founder reset orders error:', err);
@@ -927,75 +1053,74 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const founderDeleteUnpaidOrder = useCallback(
     async (orderId: string, founderAuth: FounderAuthHeaders): Promise<{ ok: boolean; message?: string }> => {
-      const target = ordersRef.current.find(o => o.id === orderId);
+      const target = ordersRef.current.find(o => o.id === orderId) || firestoreMapRef.current.get(orderId);
       if (target?.paymentStatus === 'PAID') {
         return { ok: false, message: 'Safety block: Cannot delete a verified PAID customer order.' };
       }
       addDismissedIds([orderId]);
 
+      if (isCloudSyncActiveRef.current && firestoreMapRef.current.has(orderId)) {
+        try {
+          await fsDeleteUnpaidOrder(orderId);
+        } catch (err) {
+          console.error('Firestore delete unpaid order error:', err);
+          return { ok: false, message: 'Could not remove awaiting order from Cloud Sync.' };
+        }
+      }
+
       try {
-        const res = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
+        await fetch(`/api/orders/${encodeURIComponent(orderId)}`, {
           method: 'DELETE',
           headers: {
             'x-founder-email': founderAuth.email,
             'x-founder-code': founderAuth.code,
           },
         });
-        const data = await safeParseJson(res);
-        if (data !== null) {
-          if (!res.ok) {
-            return { ok: false, message: typeof data.error === 'string' ? data.error : 'Could not delete unpaid visit.' };
-          }
-          if (Array.isArray(data.orders)) {
-            const { merged } = mergeAuthoritativeOrders(data.orders as Order[], ordersRef.current);
-            setOrders(merged);
-          }
-          return { ok: true, message: `Removed non-paying visitor entry #${orderId}.` };
-        }
       } catch (err) {
         console.warn('Delete unpaid order notice:', err);
       }
 
       setOrders(prev => prev.filter(o => o.id !== orderId || o.paymentStatus === 'PAID'));
-      return { ok: true, message: `Removed non-paying visitor entry #${orderId}.` };
+      return { ok: true, message: `Permanently removed awaiting entry #${orderId}.` };
     },
     []
   );
 
   const founderClearUnpaidOrders = useCallback(
     async (founderAuth: FounderAuthHeaders): Promise<{ ok: boolean; message?: string }> => {
-      const unpaidIds = ordersRef.current.filter(o => o.paymentStatus !== 'PAID').map(o => o.id);
+      const unpaidIds = Array.from(
+        new Set([
+          ...ordersRef.current.filter(o => o.paymentStatus !== 'PAID').map(o => o.id),
+          ...Array.from(firestoreMapRef.current.values())
+            .filter(o => o.paymentStatus !== 'PAID')
+            .map(o => o.id),
+        ])
+      );
       addDismissedIds(unpaidIds);
 
+      if (isCloudSyncActiveRef.current && unpaidIds.length > 0) {
+        try {
+          await fsClearAllUnpaidOrders(unpaidIds);
+        } catch (err) {
+          console.error('Firestore clear unpaid orders error:', err);
+          return { ok: false, message: 'Could not clear awaiting list from Cloud Sync.' };
+        }
+      }
+
       try {
-        const res = await fetch('/api/orders/clear-unpaid', {
+        await fetch('/api/orders/clear-unpaid', {
           method: 'POST',
           headers: {
             'x-founder-email': founderAuth.email,
             'x-founder-code': founderAuth.code,
           },
         });
-        const data = await safeParseJson(res);
-        if (data !== null) {
-          if (!res.ok) {
-            return { ok: false, message: typeof data.error === 'string' ? data.error : 'Could not clear unpaid entries.' };
-          }
-          if (Array.isArray(data.orders)) {
-            const { merged } = mergeAuthoritativeOrders(data.orders as Order[], ordersRef.current);
-            setOrders(merged);
-          }
-          const removed = typeof data.removedCount === 'number' ? data.removedCount : unpaidIds.length;
-          return {
-            ok: true,
-            message: `Removed ${removed} non-paying visitor entries. All PAID customers preserved.`,
-          };
-        }
       } catch (err) {
         console.warn('Clear unpaid orders notice:', err);
       }
 
       setOrders(prev => prev.filter(o => o.paymentStatus === 'PAID'));
-      return { ok: true, message: 'Removed all non-paying visitor entries. All PAID customers preserved.' };
+      return { ok: true, message: 'Permanently cleared awaiting list across all devices. Paid customers preserved.' };
     },
     []
   );
@@ -1054,6 +1179,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         founderClearUnpaidOrders,
         recentAdminAlert,
         clearAdminAlert,
+        firebaseUser,
+        isCloudSyncActive,
+        cloudSyncError,
+        isConnectingCloudSync,
+        connectGoogleCloudSync,
+        disconnectGoogleCloudSync,
       }}
     >
       {children}

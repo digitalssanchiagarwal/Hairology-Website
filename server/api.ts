@@ -654,7 +654,7 @@ export function attachApiRoutes(app: express.Express): void {
     }
   });
 
-  app.post('/api/orders/manual', requireFounderAuth, (req, res) => {
+  const handleManualOrderCreate = (req: Request, res: Response) => {
     try {
       const orderInput = req.body?.order as Partial<Order> | undefined;
       if (!orderInput?.deliveryAddress?.recipientName || !orderInput?.customerPhone || typeof orderInput.total !== 'number' || orderInput.total <= 0) {
@@ -711,7 +711,10 @@ export function attachApiRoutes(app: express.Express): void {
       console.error('Manual order create error:', err);
       res.status(500).json({ error: 'Unable to log manual order.' });
     }
-  });
+  };
+
+  app.post('/api/orders/manual', requireFounderAuth, handleManualOrderCreate);
+  app.post('/api/orders/manual-create', requireFounderAuth, handleManualOrderCreate);
 
   app.patch('/api/orders/:id/status', requireFounderAuth, (req, res) => {
     const orderId = req.params.id;

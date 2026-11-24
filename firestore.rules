@@ -71,7 +71,7 @@ service cloud.firestore {
         data.keys().hasOnly([
           'id', 'createdAtIso', 'customerPhone', 'deliveryAddress', 'items',
           'subtotal', 'discount', 'shipping', 'codFee', 'total',
-          'paymentMethod', 'paymentStatus', 'orderStatus',
+          'paymentMethod', 'paymentInitiated', 'paymentStatus', 'orderStatus',
           'payerUpi', 'trackingNumber', 'gatewayTransactionId',
           'paymentVerifiedAt', 'paymentFailureReason', 'createdAt', 'updatedAt'
         ]) &&
@@ -86,6 +86,7 @@ service cloud.firestore {
         data.codFee is number && data.codFee == 0 &&
         data.total is number && data.total > 0 &&
         data.paymentMethod is string && data.paymentMethod in ['UPI_QR', 'UPI'] &&
+        (!('paymentInitiated' in data) || (data.paymentInitiated is bool)) &&
         data.paymentStatus is string && data.paymentStatus in ['PENDING', 'PAID', 'FAILED', 'REFUNDED'] &&
         data.orderStatus is string && data.orderStatus in ['PENDING_CONFIRMATION', 'CONFIRMED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'PAYMENT_FAILED'] &&
         (!('payerUpi' in data) || (data.payerUpi is string && data.payerUpi.size() <= 64)) &&
@@ -121,7 +122,7 @@ service cloud.firestore {
       allow get: if isValidId(orderId) && isAdmin();
       allow list: if isAdmin();
 
-      // Atomic creation requires matching public status mirror in the same batch; customers strictly PENDING, admin may log PAID orders
+      // Atomic creation requires matching public status mirror in the same batch; customers strictly PENDING, admin may sync PAID orders
       allow create: if isValidId(orderId) &&
         isValidOrder(incoming(), orderId) &&
         incoming().createdAt == request.time &&
@@ -129,7 +130,7 @@ service cloud.firestore {
         existsAfter(/databases/$(database)/documents/orderStatuses/$(orderId)) &&
         (
           (incoming().paymentStatus == 'PENDING' && incoming().orderStatus == 'PENDING_CONFIRMATION') ||
-          (isAdmin() && incoming().paymentStatus in ['PENDING', 'PAID'] && incoming().orderStatus in ['PENDING_CONFIRMATION', 'CONFIRMED'])
+          (isAdmin() && incoming().paymentStatus in ['PENDING', 'PAID'] && incoming().orderStatus in ['PENDING_CONFIRMATION', 'CONFIRMED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED'])
         );
 
       allow update: if isValidId(orderId) &&
@@ -152,7 +153,7 @@ service cloud.firestore {
             incoming().orderStatus == 'CONFIRMED' &&
             incoming().diff(existing()).affectedKeys().hasOnly([
               'paymentStatus', 'orderStatus', 'gatewayTransactionId',
-              'paymentVerifiedAt', 'paymentFailureReason', 'updatedAt'
+              'paymentVerifiedAt', 'paymentFailureReason', 'paymentInitiated', 'updatedAt'
             ])
           ) ||
           (
@@ -173,7 +174,8 @@ service cloud.firestore {
           )
         );
 
-      allow delete: if isValidId(orderId) && isAdmin();
+      // Only unpaid/abandoned orders can be dismissed; verified PAID orders cannot be deleted
+      allow delete: if isValidId(orderId) && isAdmin() && existing().paymentStatus != 'PAID';
     }
 
     // ================= PUBLIC ORDER STATUS MIRROR (ZERO PII) =================
@@ -188,7 +190,7 @@ service cloud.firestore {
         existsAfter(/databases/$(database)/documents/orders/$(orderId)) &&
         (
           (incoming().paymentStatus == 'PENDING' && incoming().orderStatus == 'PENDING_CONFIRMATION') ||
-          (isAdmin() && incoming().paymentStatus in ['PENDING', 'PAID'] && incoming().orderStatus in ['PENDING_CONFIRMATION', 'CONFIRMED'])
+          (isAdmin() && incoming().paymentStatus in ['PENDING', 'PAID'] && incoming().orderStatus in ['PENDING_CONFIRMATION', 'CONFIRMED', 'DISPATCHED', 'OUT_FOR_DELIVERY', 'DELIVERED'])
         );
 
       allow update: if isValidId(orderId) &&
@@ -224,7 +226,7 @@ service cloud.firestore {
           )
         );
 
-      allow delete: if isValidId(orderId) && isAdmin();
+      allow delete: if isValidId(orderId) && isAdmin() && existing().paymentStatus != 'PAID';
     }
 
     // ================= ADMINS REGISTRY =================
