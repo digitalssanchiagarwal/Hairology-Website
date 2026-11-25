@@ -9,20 +9,19 @@ import {
   ShoppingBag
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { PRODUCTS } from '../data/products';
 
 export const CartDrawer: React.FC = () => {
   const { 
     isCartOpen, 
     closeCart, 
     items, 
+    addItem,
     removeItem, 
     updateQuantity, 
     subtotal, 
     totalSavings, 
     shippingFee, 
-    openCheckout,
-    addItem 
+    openCheckout
   } = useCart();
 
   const finalTotal = Math.max(0, subtotal + shippingFee);
@@ -74,12 +73,11 @@ export const CartDrawer: React.FC = () => {
                 Explore our science-backed formulations for Indian hard water.
               </p>
               <button
-                onClick={() => {
-                  addItem('the-duo', 'duo-full', 1);
-                }}
-                className="mt-6 px-6 py-2.5 bg-[#121110] text-[#C5A880] text-xs font-bold uppercase tracking-wider rounded-xl hover:bg-[#3D3A37]"
+                type="button"
+                onClick={() => addItem('the-trio', 'trio-full', 1)}
+                className="mt-6 px-6 py-2.5 bg-[#121110] text-[#C5A880] text-xs font-bold uppercase tracking-wider rounded-xl hover:bg-[#3D3A37] cursor-pointer"
               >
-                Add The Hairology Duo (₹849)
+                Buy Trio
               </button>
             </div>
           ) : (
@@ -195,7 +193,7 @@ export const CartDrawer: React.FC = () => {
               onClick={openCheckout}
               className="w-full py-4 bg-[#121110] hover:bg-[#2A2724] text-[#C5A880] text-xs font-bold tracking-widest uppercase rounded-xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer border border-[#C5A880]/30 hover:border-[#C5A880]"
             >
-              <span>FAST CHECKOUT (UPI / NETBANKING) — ₹{finalTotal}</span>
+              <span>FAST CHECKOUT (UPI) — ₹{finalTotal}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
@@ -205,9 +203,9 @@ export const CartDrawer: React.FC = () => {
                 100% Secure SSL
               </span>
               <span>•</span>
-              <span>Instant UPI Scanner</span>
+              <span>Any UPI App</span>
               <span>•</span>
-              <span>Netbanking</span>
+              <span>Instant QR Scanner</span>
             </div>
 
           </div>

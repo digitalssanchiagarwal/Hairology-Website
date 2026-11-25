@@ -25,7 +25,6 @@ import {
   USER_UPI_ID,
   USER_UPI_NAME
 } from '../data/products';
-import { lookupPincode } from '../data/pincodes';
 import { Order } from '../types';
 import { fsCreatePendingOrder, fsWatchOrderStatus } from '../services/firestoreOrders';
 
@@ -159,11 +158,7 @@ export const FastCheckoutModal: React.FC = () => {
   const handlePincodeChange = (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 6);
     setPincode(clean);
-    if (clean.length === 6) {
-      const info = lookupPincode(clean);
-      if (info.city) setCity(info.city);
-      if (info.state) setState(info.state);
-    }
+    if (addressError) setAddressError(null);
   };
 
   const getCustomerPhoneDigits = (rawPhone: string) => {

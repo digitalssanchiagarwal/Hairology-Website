@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { CartItem, AppliedCoupon, Order, OrderAnalytics, ProductSalesMetric } from '../types';
-import { PRODUCTS, PRODUCT_IMAGE_DUO, ADMIN_PHONE, USER_UPI_ID } from '../data/products';
+import { PRODUCTS, ADMIN_PHONE, USER_UPI_ID } from '../data/products';
 import { auth, isAuthorizedFounderUser } from '../firebase';
 import {
   fsWatchAllOrders,
@@ -142,7 +142,7 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-const STORAGE_KEY_CART = 'hairology_cart_items_v1';
+const STORAGE_KEY_CART = 'hairology_cart_items_v2';
 const STORAGE_KEY_ORDERS = 'hairology_orders_v3';
 const STORAGE_KEY_VERIFIED_ORDERS = 'hairology_verified_orders_forever_v1';
 const STORAGE_KEY_DISMISSED_IDS = 'hairology_dismissed_order_ids_v1';
@@ -357,23 +357,16 @@ export function computeClientAnalytics(orders: Order[]): OrderAnalytics {
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>(() => {
     try {
+      localStorage.removeItem('hairology_cart_items_v1');
       const saved = localStorage.getItem(STORAGE_KEY_CART);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? (parsed as CartItem[]) : [];
+      }
     } catch {
       // fallback
     }
-    return [
-      {
-        productId: 'the-duo',
-        variantId: 'duo-full',
-        productName: 'The Hairology Duo (Clarify & Reconstruct)',
-        variantLabel: 'Full Size Duo (2 x 250 ml)',
-        price: 849,
-        mrp: 999,
-        quantity: 1,
-        image: PRODUCT_IMAGE_DUO,
-      }
-    ];
+    return [];
   });
 
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
