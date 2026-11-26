@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowRight, Check, ShieldCheck, Mail, Lock } from 'lucide-react';
 import { ADMIN_EMAIL, USER_LOGO_IMAGE } from '../data/products';
-import { useCart } from '../context/CartContext';
 
 export const Footer: React.FC = () => {
-  const { openVideoModal } = useCart();
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
 
@@ -133,18 +131,10 @@ export const Footer: React.FC = () => {
                 </button>
               </li>
               <li>
-                <span className="hover:text-[#121110]">Returns & Exchanges (14-Day Guarantee)</span>
-              </li>
-              <li>
                 <span className="hover:text-[#121110]">Terms & Conditions</span>
               </li>
               <li>
                 <span className="hover:text-[#121110]">Privacy Policy</span>
-              </li>
-              <li>
-                <button onClick={openVideoModal} className="hover:text-[#121110]">
-                  Watch Product Walkthrough Film
-                </button>
               </li>
             </ul>
           </div>
