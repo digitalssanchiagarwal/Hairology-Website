@@ -57,18 +57,40 @@ export const FastCheckoutModal: React.FC = () => {
   const [pendingOrder, setPendingOrder] = useState<Order | null>(null);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [dynamicUpiQrUrl, setDynamicUpiQrUrl] = useState<string>('');
-  const [useDynamicUpiQr, setUseDynamicUpiQr] = useState(true);
+  const [useDynamicUpiQr, setUseDynamicUpiQr] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
+  const [copiedAmount, setCopiedAmount] = useState(false);
+  const [upiNotice, setUpiNotice] = useState<string | null>(null);
+  const qrSectionRef = useRef<HTMLDivElement | null>(null);
   const fsCreatedOrderIdsRef = useRef<Set<string>>(new Set());
 
-  const grandTotal = Math.max(0, subtotal + shippingFee);
+  const grandTotal = Math.max(0, Math.round(subtotal + shippingFee));
   const isAboveQrAutoLimit = grandTotal > 2000;
-  const orderNote = pendingOrder ? `Hairology #${pendingOrder.id}` : `Hairology Order Rs.${grandTotal}`;
-  const amountQueryParam = isAboveQrAutoLimit ? '' : `&am=${grandTotal.toFixed(2)}`;
-  const upiDeepLink = `upi://pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
-  const gpayDeepLink = `gpay://upi/pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
-  const phonepeDeepLink = `phonepe://pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
-  const paytmDeepLink = `paytmmp://pay?pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent(USER_UPI_NAME)}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
+  const cleanOrderRef = pendingOrder ? pendingOrder.id.replace(/[^a-zA-Z0-9]/g, '') : `Rs${grandTotal}`;
+  const orderNote = `Hairology Order ${cleanOrderRef}`;
+  const amountQueryParam = isAboveQrAutoLimit ? '' : `&am=${grandTotal}`;
+  const baseUpiParams = `pa=${encodeURIComponent(USER_UPI_ID)}&pn=${encodeURIComponent('Ssanchi Agarwal')}${amountQueryParam}&cu=INR&tn=${encodeURIComponent(orderNote)}`;
+  const upiDeepLink = `upi://pay?${baseUpiParams}`;
+
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+  const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isMobileDevice = isAndroid || isIOS;
+
+  const gpayDeepLink = isAndroid
+    ? `intent://pay?${baseUpiParams}#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`
+    : isIOS
+      ? `tez://upi/pay?${baseUpiParams}`
+      : upiDeepLink;
+  const phonepeDeepLink = isAndroid
+    ? `intent://pay?${baseUpiParams}#Intent;scheme=upi;package=com.phonepe.app;end`
+    : isIOS
+      ? `phonepe://pay?${baseUpiParams}`
+      : upiDeepLink;
+  const paytmDeepLink = isAndroid
+    ? `intent://pay?${baseUpiParams}#Intent;scheme=upi;package=net.one97.paytm;end`
+    : isIOS
+      ? `paytmmp://pay?${baseUpiParams}`
+      : upiDeepLink;
 
   useEffect(() => {
     if (grandTotal > 0) {
@@ -129,7 +151,7 @@ export const FastCheckoutModal: React.FC = () => {
       }
     );
 
-    const interval = setInterval(async () => {
+    const pollServerStatus = async () => {
       try {
         const res = await fetch(`/api/orders/${encodeURIComponent(pendingOrder.id)}/status`);
         const contentType = res.headers.get('content-type') || '';
@@ -147,11 +169,22 @@ export const FastCheckoutModal: React.FC = () => {
       } catch {
         // ignore transient network poll error
       }
-    }, 2000);
+    };
+
+    const interval = setInterval(pollServerStatus, 2000);
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        void pollServerStatus();
+      }
+    };
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
 
     return () => {
       unsubFirestore();
       clearInterval(interval);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
     };
   }, [isCheckoutOpen, checkoutStep, pendingOrder, completedOrder, orders, upsertOrder]);
 
@@ -243,6 +276,12 @@ export const FastCheckoutModal: React.FC = () => {
       trackingNumber: `DELHIVERY-AWB-${Math.floor(100000000 + Math.random() * 900000000)}`,
     });
 
+    const shouldCreateFreshOrder =
+      !pendingOrder ||
+      pendingOrder.total !== grandTotal ||
+      pendingOrder.paymentStatus === 'FAILED' ||
+      pendingOrder.paymentStatus === 'PAID';
+
     try {
       let createdOrder: Order | null = null;
       let serverExplicitError: string | null = null;
@@ -258,7 +297,7 @@ export const FastCheckoutModal: React.FC = () => {
             discount: 0,
             shipping: shippingFee,
             total: grandTotal,
-            existingOrderId: pendingOrder?.id
+            existingOrderId: shouldCreateFreshOrder ? undefined : pendingOrder?.id
           })
         });
         const contentType = res.headers.get('content-type') || '';
@@ -296,6 +335,7 @@ export const FastCheckoutModal: React.FC = () => {
         ]);
       }
 
+      setUpiNotice(null);
       upsertOrder(createdOrder);
       setPendingOrder(createdOrder);
       setCheckoutStep(2);
@@ -320,11 +360,31 @@ export const FastCheckoutModal: React.FC = () => {
       await fetch(`/api/orders/${encodeURIComponent(pendingOrder.id)}/payment-initiated`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentMethod: method }),
+        body: JSON.stringify({ paymentMethod: method, order: updatedOrder }),
       });
     } catch {
       // ignore transient network error
     }
+  };
+
+  const handleUpiAppClick = (e: React.MouseEvent<HTMLAnchorElement>, appName: string) => {
+    void markPaymentInitiated('UPI');
+    navigator.clipboard?.writeText(USER_UPI_ID).catch(() => {});
+
+    if (!isMobileDevice) {
+      e.preventDefault();
+      setCopiedUpi(true);
+      setTimeout(() => setCopiedUpi(false), 3000);
+      setUpiNotice(
+        `On a laptop/desktop, UPI apps don't auto-launch from the browser. Scan the GPay QR code below with ${appName} on your phone, or paste UPI ID ${USER_UPI_ID} (copied!).`
+      );
+      qrSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    setUpiNotice(
+      `Opening ${appName}... If your UPI app or bank blocks link payments, simply copy UPI ID ${USER_UPI_ID} (copied!) or scan the GPay QR below.`
+    );
   };
 
   const buildCustomerThankYouReceipt = (order: Order) => {
@@ -338,8 +398,10 @@ export const FastCheckoutModal: React.FC = () => {
   const handleModalClose = () => {
     setCheckoutStep(1);
     setCompletedOrder(null);
+    setPendingOrder(null);
     setAddressError(null);
     setPaymentError(null);
+    setUpiNotice(null);
     setIsCreatingOrder(false);
     closeCheckout();
   };
@@ -564,10 +626,14 @@ export const FastCheckoutModal: React.FC = () => {
                     </span>
                     <input
                       type="tel"
-                      maxLength={10}
+                      maxLength={16}
                       value={phone.replace(/^\+91\s*/, '')}
                       onChange={e => {
-                        const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        const rawDigits = e.target.value.replace(/\D/g, '');
+                        const digits =
+                          rawDigits.length > 10 && (rawDigits.startsWith('91') || rawDigits.startsWith('0'))
+                            ? rawDigits.slice(-10)
+                            : rawDigits.slice(0, 10);
                         setPhone(digits);
                         if (addressError) setAddressError(null);
                       }}
@@ -601,7 +667,7 @@ export const FastCheckoutModal: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    maxLength={6}
+                    maxLength={10}
                     value={pincode}
                     onChange={e => handlePincodeChange(e.target.value)}
                     placeholder="e.g. 400050"
@@ -708,7 +774,8 @@ export const FastCheckoutModal: React.FC = () => {
 
                 <a
                   href={upiDeepLink}
-                  onClick={() => void markPaymentInitiated('UPI')}
+                  target="_top"
+                  onClick={e => handleUpiAppClick(e, 'your UPI app')}
                   className="w-full py-3.5 px-4 bg-[#121110] hover:bg-[#2A2724] text-[#C5A880] hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow cursor-pointer tabular-nums"
                 >
                   <Smartphone className="w-4 h-4" />
@@ -719,46 +786,77 @@ export const FastCheckoutModal: React.FC = () => {
                 <div className="grid grid-cols-3 gap-2">
                   <a
                     href={gpayDeepLink}
-                    onClick={() => void markPaymentInitiated('UPI')}
+                    target="_top"
+                    onClick={e => handleUpiAppClick(e, 'Google Pay')}
                     className="py-2.5 px-2 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-[11px] font-bold flex items-center justify-center transition-colors border border-[#E8DFD1] whitespace-nowrap"
                   >
                     Google Pay
                   </a>
                   <a
                     href={phonepeDeepLink}
-                    onClick={() => void markPaymentInitiated('UPI')}
+                    target="_top"
+                    onClick={e => handleUpiAppClick(e, 'PhonePe')}
                     className="py-2.5 px-2 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-[11px] font-bold flex items-center justify-center transition-colors border border-[#E8DFD1] whitespace-nowrap"
                   >
                     PhonePe
                   </a>
                   <a
                     href={paytmDeepLink}
-                    onClick={() => void markPaymentInitiated('UPI')}
+                    target="_top"
+                    onClick={e => handleUpiAppClick(e, 'Paytm / BHIM')}
                     className="py-2.5 px-2 bg-[#F4EFEB] hover:bg-[#E8DFD1] text-[#121110] rounded-xl text-[11px] font-bold flex items-center justify-center transition-colors border border-[#E8DFD1] whitespace-nowrap"
                   >
                     Paytm / BHIM
                   </a>
                 </div>
 
-                <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-[#6B7280]">
-                  <span className="font-mono truncate">UPI ID: {USER_UPI_ID}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(USER_UPI_ID).catch(() => {});
-                      setCopiedUpi(true);
-                      setTimeout(() => setCopiedUpi(false), 2000);
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-1 bg-[#FAF7F2] hover:bg-[#E8DFD1] text-[#121110] border border-[#E8DFD1] rounded-lg font-mono font-semibold text-[10px] cursor-pointer shrink-0 transition-colors"
-                  >
-                    <Copy className="w-3 h-3" />
-                    <span>{copiedUpi ? 'Copied!' : 'Copy UPI ID'}</span>
-                  </button>
+                {upiNotice && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed">
+                    {upiNotice}
+                  </div>
+                )}
+
+                <div className="p-3 bg-[#FAF7F2] rounded-xl border border-[#E8DFD1] space-y-2">
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <div className="min-w-0">
+                      <span className="text-[#6B7280] block text-[10px] uppercase font-semibold">Pay directly to UPI ID</span>
+                      <span className="font-mono font-bold text-[#121110] truncate block">{USER_UPI_ID}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(USER_UPI_ID).catch(() => {});
+                        setCopiedUpi(true);
+                        setTimeout(() => setCopiedUpi(false), 2000);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-[#E8DFD1] text-[#121110] border border-[#E8DFD1] rounded-lg font-mono font-semibold text-[10px] cursor-pointer shrink-0 transition-colors"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>{copiedUpi ? 'Copied!' : 'Copy UPI ID'}</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-[11px] pt-1.5 border-t border-[#E8DFD1]/70">
+                    <span className="text-[#6B7280]">
+                      Exact Amount: <strong className="text-[#121110] font-mono">₹{grandTotal}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(String(grandTotal)).catch(() => {});
+                        setCopiedAmount(true);
+                        setTimeout(() => setCopiedAmount(false), 2000);
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-white hover:bg-[#E8DFD1] text-[#121110] border border-[#E8DFD1] rounded-lg font-mono font-semibold text-[10px] cursor-pointer shrink-0 transition-colors"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>{copiedAmount ? 'Copied!' : `Copy ₹${grandTotal}`}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* 2. SECOND-DEVICE PAYMENT: LARGER QR CODE SCANNER */}
-              <div className="bg-white rounded-2xl border border-[#E8DFD1] shadow-sm overflow-hidden p-4 sm:p-5 space-y-4">
+              <div ref={qrSectionRef} className="bg-white rounded-2xl border border-[#E8DFD1] shadow-sm overflow-hidden p-4 sm:p-5 space-y-4">
                 <div className="flex items-center justify-between border-b border-[#E8DFD1] pb-2.5">
                   <div className="flex items-center gap-2">
                     <QrCode className="w-4 h-4 text-[#121110]" />
@@ -767,18 +865,18 @@ export const FastCheckoutModal: React.FC = () => {
                     </span>
                   </div>
                   <span className="text-[11px] font-medium text-[#6B7280]">
-                    For customers using a second device
+                    Works with GPay, PhonePe, Paytm &amp; BHIM
                   </span>
                 </div>
 
-                {isAboveQrAutoLimit && (
+                {isAboveQrAutoLimit && useDynamicUpiQr && (
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1.5">
                     <div className="font-bold flex items-center gap-1.5">
                       <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                       <span>Orders Above ₹2,000 — Enter ₹{grandTotal} Manually After Scanning</span>
                     </div>
                     <p className="leading-relaxed text-amber-800">
-                      Indian UPI limits auto-filled QR codes at ₹2,000. Scan with your second phone and type <strong>₹{grandTotal}</strong> inside your UPI app.
+                      Indian UPI limits auto-filled QR codes at ₹2,000. Scan with your phone and type <strong>₹{grandTotal}</strong> inside your UPI app.
                     </p>
                   </div>
                 )}
@@ -791,33 +889,33 @@ export const FastCheckoutModal: React.FC = () => {
                       className="w-56 h-56 sm:w-64 sm:h-64 object-contain rounded-lg"
                     />
                     <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-[#121110] text-[#C5A880] text-[10px] font-mono font-bold px-3 py-1 rounded-full border border-[#C5A880]/40 whitespace-nowrap shadow tabular-nums">
-                      {isAboveQrAutoLimit ? `ENTER ₹${grandTotal} IN APP` : `PAY ₹${grandTotal} · HAIROLOGY`}
+                      {useDynamicUpiQr && !isAboveQrAutoLimit ? `AUTO-FILL ₹${grandTotal}` : `SCAN & PAY ₹${grandTotal}`}
                     </span>
                   </div>
 
                   <p className="text-xs text-[#4B5563] leading-relaxed max-w-sm pt-2">
-                    {isAboveQrAutoLimit ? (
+                    {useDynamicUpiQr && !isAboveQrAutoLimit ? (
                       <>
-                        Open Google Pay, PhonePe, Paytm, or BHIM on your second phone, scan this QR code, and enter <strong>₹{grandTotal}</strong>.
+                        Scan this QR code with any UPI app. If your bank blocks pre-filled QR links, switch to the Official GPay QR below and enter <strong>₹{grandTotal}</strong>.
                       </>
                     ) : (
                       <>
-                        Open Google Pay, PhonePe, Paytm, or BHIM on your second phone and scan this larger QR code. <strong>₹{grandTotal}</strong> loads automatically.
+                        Open Google Pay, PhonePe, Paytm, or BHIM, scan this official QR code, and enter <strong>₹{grandTotal}</strong> to complete payment.
                       </>
                     )}
                   </p>
 
-                  <button
-                    type="button"
-                    onClick={() => setUseDynamicUpiQr(!useDynamicUpiQr)}
-                    className="text-[11px] font-mono font-semibold text-[#121110] bg-[#F4EFEB] hover:bg-[#E8DFD1] px-3 py-1.5 rounded-lg border border-[#E8DFD1] cursor-pointer transition-colors"
-                  >
-                    {useDynamicUpiQr
-                      ? 'View Original GPay QR Card'
-                      : isAboveQrAutoLimit
-                        ? 'Switch to Open-Amount QR'
+                  {!isAboveQrAutoLimit && (
+                    <button
+                      type="button"
+                      onClick={() => setUseDynamicUpiQr(!useDynamicUpiQr)}
+                      className="text-[11px] font-mono font-semibold text-[#121110] bg-[#F4EFEB] hover:bg-[#E8DFD1] px-3 py-1.5 rounded-lg border border-[#E8DFD1] cursor-pointer transition-colors"
+                    >
+                      {useDynamicUpiQr
+                        ? 'Switch to Official GPay QR Card'
                         : `Switch to Auto-Fill ₹${grandTotal} QR`}
-                  </button>
+                    </button>
+                  )}
                 </div>
               </div>
 

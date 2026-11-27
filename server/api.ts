@@ -506,22 +506,46 @@ export function attachApiRoutes(app: express.Express): void {
 
       const orders = readOrders();
 
-      // Deduplicate rapid accidental re-submissions of the same phone + total within 90 seconds
+      // Deduplicate rapid accidental re-submissions of the same phone + total within 90 seconds,
+      // while refreshing deliveryAddress/items if the customer edited their details in Step 1.
       const normalizedPhone = String(deliveryAddress.phoneNumber).trim();
       const nowMs = Date.now();
       const recentCutoffMs = nowMs - 90_000;
-      for (const ord of orders) {
-        if (
+      const existingOrderId = typeof req.body?.existingOrderId === 'string' ? req.body.existingOrderId.trim() : '';
+      const existingIdx = orders.findIndex(
+        ord =>
           ord.paymentStatus === 'PENDING' &&
-          ord.customerPhone === normalizedPhone &&
-          Number(ord.total) === Number(total) &&
-          new Date(ord.createdAt).getTime() > recentCutoffMs
-        ) {
-          const upiAmountParam = total > 2000 ? '' : `&am=${total.toFixed(2)}`;
-          const upiDeepLink = `upi://pay?pa=${encodeURIComponent(CONNECTED_UPI_ID)}&pn=${encodeURIComponent(CONNECTED_UPI_NAME)}${upiAmountParam}&cu=INR&tn=${encodeURIComponent(`Hairology #${ord.id}`)}`;
-          res.json({ order: ord, upiId: CONNECTED_UPI_ID, upiDeepLink });
-          return;
-        }
+          ((existingOrderId && ord.id === existingOrderId) ||
+            (ord.customerPhone === normalizedPhone &&
+              Number(ord.total) === Number(total) &&
+              new Date(ord.createdAt).getTime() > recentCutoffMs))
+      );
+
+      if (existingIdx !== -1) {
+        const refreshedOrder: Order = {
+          ...orders[existingIdx],
+          customerPhone: normalizedPhone,
+          deliveryAddress: {
+            recipientName: String(deliveryAddress.recipientName),
+            phoneNumber: normalizedPhone,
+            streetAddress: String(deliveryAddress.streetAddress),
+            city: String(deliveryAddress.city),
+            state: String(deliveryAddress.state),
+            pincode: String(deliveryAddress.pincode),
+          },
+          items,
+          subtotal,
+          discount,
+          shipping,
+          total,
+        };
+        const nextOrders = [...orders];
+        nextOrders[existingIdx] = refreshedOrder;
+        writeOrders(nextOrders);
+        const upiAmountParam = total > 2000 ? '' : `&am=${Math.round(total)}`;
+        const upiDeepLink = `upi://pay?pa=${encodeURIComponent(CONNECTED_UPI_ID)}&pn=${encodeURIComponent('Ssanchi Agarwal')}${upiAmountParam}&cu=INR&tn=${encodeURIComponent(`Hairology Order ${refreshedOrder.id.replace(/[^a-zA-Z0-9]/g, '')}`)}`;
+        res.json({ order: refreshedOrder, upiId: CONNECTED_UPI_ID, upiDeepLink });
+        return;
       }
 
       const allowedMethods: Array<Order['paymentMethod']> = ['UPI_QR', 'UPI', 'CARD', 'NETBANKING'];
@@ -557,8 +581,8 @@ export function attachApiRoutes(app: express.Express): void {
       };
 
       writeOrders([newOrder, ...orders]);
-      const upiAmountParam = total > 2000 ? '' : `&am=${total.toFixed(2)}`;
-      const upiDeepLink = `upi://pay?pa=${encodeURIComponent(CONNECTED_UPI_ID)}&pn=${encodeURIComponent(CONNECTED_UPI_NAME)}${upiAmountParam}&cu=INR&tn=${encodeURIComponent(`Hairology #${orderId}`)}`;
+      const upiAmountParam = total > 2000 ? '' : `&am=${Math.round(total)}`;
+      const upiDeepLink = `upi://pay?pa=${encodeURIComponent(CONNECTED_UPI_ID)}&pn=${encodeURIComponent('Ssanchi Agarwal')}${upiAmountParam}&cu=INR&tn=${encodeURIComponent(`Hairology Order ${orderId.replace(/[^a-zA-Z0-9]/g, '')}`)}`;
 
       res.json({
         order: newOrder,
@@ -611,7 +635,16 @@ export function attachApiRoutes(app: express.Express): void {
         .slice(0, 100);
       const allowedMethods: Array<Order['paymentMethod']> = ['UPI_QR', 'UPI', 'CARD', 'NETBANKING'];
       const orders = readOrders();
-      const idx = orders.findIndex(o => o.id === orderId);
+      let idx = orders.findIndex(o => o.id === orderId);
+      const fallbackOrder = req.body?.order as Order | undefined;
+      if (idx === -1 && fallbackOrder && fallbackOrder.id === orderId) {
+        orders.unshift({
+          ...fallbackOrder,
+          paymentStatus: 'PENDING',
+          orderStatus: 'PENDING_CONFIRMATION',
+        });
+        idx = 0;
+      }
       if (idx === -1) {
         res.status(404).json({ error: 'Order not found.' });
         return;
