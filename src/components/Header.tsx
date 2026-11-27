@@ -233,7 +233,7 @@ export const Header: React.FC = () => {
                   }}
                   className="font-medium underline hover:text-[#C5A880]"
                 >
-                  The Hairology Duo (₹849)
+                  The Hairology Duo (₹899)
                 </button>
                 <span>·</span>
                 <button

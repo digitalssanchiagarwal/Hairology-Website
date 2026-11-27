@@ -141,7 +141,7 @@ export const PRODUCTS: Product[] = [
         label: 'Full Size Duo (2 x 250 ml)',
         size: '500 ml total',
         mrp: 999,
-        price: 849,
+        price: 899,
       },
       {
         id: 'duo-travel',

@@ -38,7 +38,7 @@ export const HairologyRoutine: React.FC = () => {
       desc: 'Halophile extremolytes form a light-refracting film that repels ambient atmospheric water.',
       productId: 'the-duo',
       variantId: 'duo-full',
-      price: 849
+      price: 899
     }
   ];
 
@@ -123,7 +123,7 @@ export const HairologyRoutine: React.FC = () => {
                 Get The Full Duo (Clarify & Reconstruct)
               </div>
               <div className="text-xs text-[#E8DFD1]/70 mt-1">
-                Save ₹150 on the complete launch bundle (Total Value ₹999 for ₹849).
+                Save ₹100 on the complete launch bundle (Total Value ₹999 for ₹899).
               </div>
             </div>
           </div>
@@ -132,7 +132,7 @@ export const HairologyRoutine: React.FC = () => {
             onClick={() => addItem('the-duo', 'duo-full', 1)}
             className="px-6 py-3 bg-[#C5A880] hover:bg-[#B39265] text-[#121110] text-xs font-bold tracking-wider uppercase rounded-lg shadow transition-all flex items-center gap-2 shrink-0 cursor-pointer"
           >
-            <span>ADD THE DUO (₹849)</span>
+            <span>ADD THE DUO (₹899)</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
